@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- =================================================================
+         OPEN GRAPH META TAGS - Hiển thị preview trên mạng xã hội
+         ================================================================= -->
+    
+    <!-- Facebook & General Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="<%= title %>">
+    <meta property="og:description" content="Xem ngay deal hot trên Shopee với giá ưu đãi đặc biệt!">
+    <meta property="og:image" content="<%= imageUrl %>">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="<%= currentUrl %>">
+    <meta property="og:site_name" content="Shopee Deals">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<%= title %>">
+    <meta name="twitter:description" content="Xem ngay deal hot trên Shopee với giá ưu đãi đặc biệt!">
+    <meta name="twitter:image" content="<%= imageUrl %>">
+    
+    <!-- Zalo -->
+    <meta property="zalo:official_account_id" content="">
+    
+    <title><%= title %></title>
+    
+    <style>
+        /* =================================================================
+           LOADING ANIMATION STYLES
+           Hiển thị trong khi chờ redirect
+           ================================================================= -->
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #EE4D2D 0%, #FF6B35 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            padding: 40px 20px;
+            max-width: 400px;
+        }
+        
+        .logo {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .logo svg {
+            width: 50px;
+            height: 50px;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        p {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 30px;
+        }
+        
+        .redirect-info {
+            background: rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 15px 20px;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .manual-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: white;
+            text-decoration: underline;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        
+        .manual-link:hover {
+            opacity: 1;
+        }
+        
+        /* Hidden iframe for deep link attempt */
+        .hidden-iframe {
+            display: none;
+            width: 0;
+            height: 0;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Shopee Logo -->
+        <div class="logo">
+            <svg viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M96 0C43.065 0 0 43.065 0 96s43.065 96 96 96 96-43.065 96-96S148.935 0 96 0z" fill="#EE4D2D"/>
+                <path d="M96 38c-14.36 0-26 11.64-26 26 0 11.847 7.935 21.823 18.78 24.923C77.935 91.823 70 101.8 70 113.647c0 14.36 11.64 26 26 26s26-11.64 26-26c0-11.847-7.935-21.823-18.78-24.923C114.065 85.823 122 75.847 122 64c0-14.36-11.64-26-26-26z" fill="white"/>
+            </svg>
+        </div>
+        
+        <!-- Loading Spinner -->
+        <div class="spinner"></div>
+        
+        <!-- Status Messages -->
+        <h1 id="status-title">Đang chuyển hướng...</h1>
+        <p id="status-message">Vui lòng chờ trong giây lát</p>
+        
+        <!-- Info Box -->
+        <div class="redirect-info">
+            <strong><%= title %></strong><br>
+            Bạn sẽ được chuyển đến Shopee ngay bây giờ
+        </div>
+        
+        <!-- Manual Link (hiện khi auto-redirect thất bại) -->
+        <a href="<%= targetUrl %>" class="manual-link" id="manual-link" style="display: none;">
+            Nhấn vào đây nếu không tự động chuyển hướng
+        </a>
+    </div>
+    
+    <!-- Hidden iframe để thử mở Deep Link -->
+    <iframe id="deep-link-iframe" class="hidden-iframe"></iframe>
+    
+    <script>
+        /**
+         * =================================================================
+         * DEEP LINK REDIRECT SCRIPT
+         * 
+         * Cơ chế hoạt động:
+         * 1. Kiểm tra thiết bị (mobile/desktop)
+         * 2. Nếu mobile → Thử mở app Shopee qua Deep Link (shopee://)
+         * 3. Nếu app không mở được trong 200ms → Fallback sang web URL
+         * 4. Nếu desktop → Redirect trực tiếp sang web URL
+         * =================================================================
+         */
+        
+        (function() {
+            'use strict';
+            
+            // URL đích từ Backend
+            const targetUrl = '<%= targetUrl %>';
+            
+            // Các element DOM
+            const statusTitle = document.getElementById('status-title');
+            const statusMessage = document.getElementById('status-message');
+            const manualLink = document.getElementById('manual-link');
+            const deepLinkIframe = document.getElementById('deep-link-iframe');
+            
+            /**
+             * Kiểm tra thiết bị có phải mobile không
+             * @returns {boolean}
+             */
+            function isMobileDevice() {
+                return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i
+                    .test(navigator.userAgent);
+            }
+            
+            /**
+             * Kiểm tra hệ điều hành
+             * @returns {string} - 'ios', 'android', hoặc 'other'
+             */
+            function getOS() {
+                const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+                
+                if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
+                    return 'ios';
+                }
+                
+                if (/android/i.test(userAgent)) {
+                    return 'android';
+                }
+                
+                return 'other';
+            }
+            
+            /**
+             * Chuyển đổi URL Shopee web thành Deep Link
+             * 
+             * Ví dụ:
+             * - https://shopee.vn/product/123 → shopee://product/123
+             * - https://shopee.vn/flash_sale → shopee://flash_sale
+             * 
+             * @param {string} webUrl - URL web của Shopee
+             * @returns {string} - Deep Link URL
+             */
+            function convertToDeepLink(webUrl) {
+                try {
+                    const url = new URL(webUrl);
+                    
+                    // Lấy path và query string
+                    const pathAndQuery = url.pathname + url.search;
+                    
+                    // Tạo Deep Link
+                    // Format: shopee://[path][query]
+                    return 'shopee:/' + pathAndQuery;
+                    
+                } catch (e) {
+                    console.error('Error converting to deep link:', e);
+                    return null;
+                }
+            }
+            
+            /**
+             * Thử mở Deep Link sử dụng iframe ẩn
+             * 
+             * Cơ chế:
+             * - Gán src của iframe thành deep link URL
+             * - Nếu app đã cài → App sẽ mở và handle deep link
+             * - Nếu app chưa cài → Không có gì xảy ra, sẽ fallback
+             * 
+             * @param {string} deepLink - Deep Link URL
+             */
+            function tryDeepLinkViaIframe(deepLink) {
+                deepLinkIframe.src = deepLink;
+            }
+            
+            /**
+             * Thử mở Deep Link sử dụng window.location
+             * 
+             * Backup method nếu iframe không hoạt động
+             * @param {string} deepLink - Deep Link URL
+             */
+            function tryDeepLinkViaLocation(deepLink) {
+                window.location.href = deepLink;
+            }
+            
+            /**
+             * Redirect sang web URL (Fallback)
+             */
+            function fallbackToWebUrl() {
+                statusTitle.textContent = 'Đang chuyển đến Shopee...';
+                statusMessage.textContent = 'Mở trình duyệt web';
+                
+                window.location.href = targetUrl;
+            }
+            
+            /**
+             * Hiển thị link manual khi tất cả phương thức thất bại
+             */
+            function showManualLink() {
+                manualLink.style.display = 'inline-block';
+            }
+            
+            /**
+             * Main Logic - Xử lý redirect
+             */
+            function handleRedirect() {
+                console.log('🚀 Starting redirect process...');
+                console.log('📱 Device:', isMobileDevice() ? 'Mobile' : 'Desktop');
+                console.log('💻 OS:', getOS());
+                console.log('🎯 Target URL:', targetUrl);
+                
+                // Nếu không phải mobile → Redirect trực tiếp
+                if (!isMobileDevice()) {
+                    console.log('📍 Desktop detected, redirecting to web URL...');
+                    statusTitle.textContent = 'Đang chuyển hướng...';
+                    
+                    // Delay nhẹ để hiện animation
+                    setTimeout(fallbackToWebUrl, 500);
+                    return;
+                }
+                
+                // Mobile → Thử Deep Link
+                const deepLink = convertToDeepLink(targetUrl);
+                console.log('🔗 Deep Link:', deepLink);
+                
+                if (!deepLink) {
+                    console.log('❌ Failed to generate deep link, using fallback');
+                    setTimeout(fallbackToWebUrl, 500);
+                    return;
+                }
+                
+                // Cập nhật UI
+                statusTitle.textContent = 'Đang mở ứng dụng Shopee...';
+                statusMessage.textContent = 'Nếu đã cài app, Shopee sẽ mở ngay';
+                
+                // Biến theo dõi trạng thái
+                let appOpened = false;
+                
+                /**
+                 * FALLBACK MECHANISM
+                 * 
+                 * Cách hoạt động:
+                 * 1. Thử mở deep link
+                 * 2. Set timeout 200ms
+                 * 3. Nếu app mở → User rời khỏi trang → visibilitychange event
+                 * 4. Nếu app không mở → Timeout chạy → Redirect to web
+                 * 
+                 * Tại sao 200ms?
+                 * - Đủ thời gian để OS xử lý deep link
+                 * - Không quá lâu khiến user phải chờ
+                 */
+                
+                // Lắng nghe sự kiện visibility change
+                // Khi app mở, trang web sẽ bị blur/hidden
+                const visibilityHandler = function() {
+                    if (document.hidden || document.webkitHidden) {
+                        appOpened = true;
+                        console.log('✅ App opened (visibility changed)');
+                    }
+                };
+                
+                document.addEventListener('visibilitychange', visibilityHandler);
+                document.addEventListener('webkitvisibilitychange', visibilityHandler);
+                
+                // Lắng nghe blur event (backup)
+                window.addEventListener('blur', function() {
+                    appOpened = true;
+                    console.log('✅ App opened (window blur)');
+                });
+                
+                // Thử mở deep link qua iframe (method 1)
+                tryDeepLinkViaIframe(deepLink);
+                
+                // Fallback timer - 200ms
+                const fallbackTimer = setTimeout(function() {
+                    // Kiểm tra nếu app đã mở
+                    if (appOpened) {
+                        console.log('✅ App was opened, no fallback needed');
+                        return;
+                    }
+                    
+                    console.log('⏰ Timeout reached, trying location method...');
+                    
+                    // Thử method 2: window.location
+                    tryDeepLinkViaLocation(deepLink);
+                    
+                    // Set thêm 1 timer cho web fallback
+                    setTimeout(function() {
+                        if (!appOpened && !document.hidden) {
+                            console.log('🌐 Falling back to web URL');
+                            
+                            // Cleanup listeners
+                            document.removeEventListener('visibilitychange', visibilityHandler);
+                            document.removeEventListener('webkitvisibilitychange', visibilityHandler);
+                            
+                            fallbackToWebUrl();
+                        }
+                    }, 300); // Thêm 300ms cho method 2
+                    
+                }, 200); // 200ms cho method 1
+                
+                // Hiện manual link sau 2 giây (safety net)
+                setTimeout(showManualLink, 2000);
+            }
+            
+            // Bắt đầu process khi DOM ready
+            if (document.readyState === 'complete') {
+                handleRedirect();
+            } else {
+                window.addEventListener('load', handleRedirect);
+            }
+            
+        })();
+    </script>
+</body>
+</html>
