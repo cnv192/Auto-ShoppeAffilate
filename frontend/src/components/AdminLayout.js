@@ -8,7 +8,8 @@ import {
     FacebookOutlined,
     ThunderboltOutlined,
     LogoutOutlined,
-    SettingOutlined
+    SettingOutlined,
+    FolderOutlined
 } from '@ant-design/icons';
 import authService from '../services/authService';
 
@@ -32,6 +33,7 @@ const AdminLayout = ({ children }) => {
         if (path.includes('/admin/links')) return 'links';
         if (path.includes('/admin/campaigns')) return 'campaigns';
         if (path.includes('/admin/facebook')) return 'facebook';
+        if (path.includes('/admin/resources')) return 'resources';
         if (path.includes('/admin/users')) return 'users';
         if (path.includes('/admin/profile')) return 'profile';
         return 'dashboard';
@@ -87,6 +89,11 @@ const AdminLayout = ({ children }) => {
                 key: 'campaigns',
                 icon: <ThunderboltOutlined />,
                 label: 'Chiến dịch'
+            },
+            {
+                key: 'resources',
+                icon: <FolderOutlined />,
+                label: 'Resource Sets'
             },
             {
                 key: 'facebook',

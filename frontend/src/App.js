@@ -12,6 +12,7 @@ import CampaignList from './components/CampaignList';
 import FacebookAccountManager from './components/FacebookAccountManager';
 import UserManagement from './components/UserManagement';
 import UserProfile from './components/UserProfile';
+import ResourceManagement from './components/ResourceManagement';
 import ExtensionAuthPage from './pages/ExtensionAuthPage';
 import authService from './services/authService';
 
@@ -73,6 +74,7 @@ function App() {
                                         <Route path="links" element={<LinksPage />} />
                                         <Route path="campaigns" element={<CampaignList />} />
                                         <Route path="facebook" element={<FacebookAccountManager />} />
+                                        <Route path="resources" element={<ResourceManagement />} />
                                         <Route path="profile" element={<UserProfile />} />
                                         {authService.isAdmin() && (
                                             <Route path="users" element={<UserManagement />} />

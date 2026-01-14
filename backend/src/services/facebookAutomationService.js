@@ -628,40 +628,71 @@ class FacebookAPI {
             let likes = 0, comments = 0, shares = 0;
             
             // ============================================
+            // HELPER: Parse metric strings like "1.2K", "1,200", "500", "2.5M"
+            // Converts K/M suffixes to actual numbers
+            // ============================================
+            const parseMetric = (str) => {
+                if (!str) return 0;
+                const upperStr = str.toUpperCase().trim();
+                let multiplier = 1;
+                
+                if (upperStr.includes('K')) {
+                    multiplier = 1000;
+                } else if (upperStr.includes('M')) {
+                    multiplier = 1000000;
+                }
+                
+                // Remove K/M and handle different decimal separators
+                // "1.2K" -> "1.2", "1,200" -> "1200", "1.234" -> "1234" (thousands separator)
+                let cleanStr = str.replace(/[KMkm]/g, '').trim();
+                
+                // If multiplier is set (K/M), treat . or , as decimal
+                if (multiplier > 1) {
+                    cleanStr = cleanStr.replace(',', '.');
+                    const num = parseFloat(cleanStr);
+                    return isNaN(num) ? 0 : Math.floor(num * multiplier);
+                }
+                
+                // Otherwise, just remove separators and parse as integer
+                cleanStr = cleanStr.replace(/[.,]/g, '');
+                const num = parseInt(cleanStr);
+                return isNaN(num) ? 0 : num;
+            };
+            
+            // ============================================
             // LIKES/REACTIONS PATTERNS (try multiple)
             // Priority: Structured JSON > Aria labels > Text patterns
             // ============================================
             const likePatterns = [
                 // JSON/GraphQL patterns (most reliable)
-                /"reaction_count":\s*\{\s*"count":\s*(\d+)\s*\}/,           // {"reaction_count":{"count":123}}
-                /reaction_count:\s*\{\s*count:\s*(\d+)\s*\}/,               // reaction_count:{count:123}
-                /"likers":\s*\{\s*"count":\s*(\d+)\s*\}/,                   // {"likers":{"count":123}}
-                /likers:\s*\{\s*count:\s*(\d+)\s*\}/,                       // likers:{count:123}
-                /"reactors":\s*\{\s*"count":\s*(\d+)\s*\}/,                 // {"reactors":{"count":123}}
-                /"reaction_count":(\d+)/,                                    // "reaction_count":123
+                /"reaction_count":\s*\{\s*"count":\s*(\d+)\s*\}/,                     // {"reaction_count":{"count":123}}
+                /reaction_count:\s*\{\s*count:\s*(\d+)\s*\}/,                         // reaction_count:{count:123}
+                /"likers":\s*\{\s*"count":\s*(\d+)\s*\}/,                             // {"likers":{"count":123}}
+                /likers:\s*\{\s*count:\s*(\d+)\s*\}/,                                 // likers:{count:123}
+                /"reactors":\s*\{\s*"count":\s*(\d+)\s*\}/,                           // {"reactors":{"count":123}}
+                /"reaction_count":(\d+)/,                                              // "reaction_count":123
                 
                 // HTML attribute patterns
-                /data-reaction-count="(\d+)"/,                               // data-reaction-count="123"
-                /aria-label="[^"]*?(\d+)\s*(?:người|people)/i,              // aria-label="... 123 người"
+                /data-reaction-count="(\d+)"/,                                         // data-reaction-count="123"
+                /aria-label="[^"]*?(\d+(?:[.,]\d+)?[KM]?)\s*(?:người|people)/i,       // aria-label="... 1.2K người"
                 
-                // Vietnamese text patterns in rendered HTML
-                />Tất cả cảm xúc:[^<]*?(\d+(?:[.,]\d+)?)</i,               // >Tất cả cảm xúc: 467<
-                />(\d+(?:[.,]\d+)?)\s*(?:người\s*thích|người|people)</i,   // >467 người thích<
-                /aria-label="(?:Thích|Yêu thích|Like|Love|Haha|Wow|Buồn|Phẫn nộ|Sad|Angry)[^"]*?(\d+)\s*(?:người|people)"/i,
+                // Vietnamese text patterns in rendered HTML (NUMBER BEFORE TEXT)
+                />(\d+(?:[.,]\d+)?[KM]?)\s*(?:Tất cả cảm xúc|All emotions)</i,        // >467 Tất cả cảm xúc<
+                />Tất cả cảm xúc[:\s]*(\d+(?:[.,]\d+)?[KM]?)</i,                      // >Tất cả cảm xúc: 467<
+                />(\d+(?:[.,]\d+)?[KM]?)\s*(?:người\s*thích|người|people)</i,         // >467 người thích<
+                /aria-label="(?:Thích|Yêu thích|Like|Love|Haha|Wow|Buồn|Phẫn nộ|Sad|Angry)[^"]*?(\d+(?:[.,]\d+)?[KM]?)\s*(?:người|people)"/i,
                 
-                // General text patterns
-                /(\d+(?:[.,]\d+)?)\s*(?:reactions?|likes?|người\s*thích)/i, // "123 reactions" or "123 likes"
+                // General text patterns with K/M support
+                /(\d+(?:[.,]\d+)?[KM]?)\s*(?:reactions?|likes?|người\s*thích)/i,      // "1.2K reactions"
             ];
             
             for (const pattern of likePatterns) {
                 const match = html.match(pattern);
                 if (match) {
-                    // Handle numbers with commas or dots (e.g., "1,234" or "1.234")
-                    const rawNum = match[1].replace(/[.,]/g, '');
-                    const parsed = parseInt(rawNum);
+                    const parsed = parseMetric(match[1]);
                     if (parsed > 0) {
                         likes = parsed;
-                        console.log(`      📊 [Regex] Likes: ${likes} (pattern: ${pattern.source.substring(0, 35)}...)`);
+                        console.log(`      📊 [Regex] Likes: ${likes} (raw: "${match[1]}", pattern: ${pattern.source.substring(0, 35)}...)`);
                         break;
                     }
                 }
@@ -673,77 +704,77 @@ class FacebookAPI {
             // ============================================
             const commentPatterns = [
                 // JSON/GraphQL patterns (most reliable)
-                /"total_comment_count":\s*(\d+)/,                            // "total_comment_count":45
-                /total_comment_count:\s*(\d+)/,                              // total_comment_count:45
-                /"comment_count":\s*\{\s*"total_count":\s*(\d+)\s*\}/,      // {"comment_count":{"total_count":45}}
-                /comment_count:\s*\{\s*total_count:\s*(\d+)\s*\}/,          // comment_count:{total_count:45}
-                /"comments":\s*\{\s*"total_count":\s*(\d+)\s*\}/,           // {"comments":{"total_count":45}}
-                /"comment_count":(\d+)/,                                     // "comment_count":45
+                /"total_comment_count":\s*(\d+)/,                                      // "total_comment_count":45
+                /total_comment_count:\s*(\d+)/,                                        // total_comment_count:45
+                /"comment_count":\s*\{\s*"total_count":\s*(\d+)\s*\}/,                // {"comment_count":{"total_count":45}}
+                /comment_count:\s*\{\s*total_count:\s*(\d+)\s*\}/,                    // comment_count:{total_count:45}
+                /"comments":\s*\{\s*"total_count":\s*(\d+)\s*\}/,                     // {"comments":{"total_count":45}}
+                /"comment_count":(\d+)/,                                               // "comment_count":45
                 
                 // HTML attribute patterns  
-                /data-comment-count="(\d+)"/,                                // data-comment-count="45"
-                /aria-label="[^"]*?(\d+)\s*(?:bình luận|comments?)"/i,      // aria-label="23 bình luận"
+                /data-comment-count="(\d+)"/,                                          // data-comment-count="45"
+                /aria-label="[^"]*?(\d+(?:[.,]\d+)?[KM]?)\s*(?:bình luận|comments?)"/i, // aria-label="2.3K bình luận"
                 
-                // Vietnamese/English text patterns in rendered HTML (CRITICAL FIX)
-                />(\d+(?:[.,]\d+)?)\s*(?:bình\s*luận|comments?)</i,         // >23 bình luận< or >23 comments<
-                />\s*(\d+(?:[.,]\d+)?)\s*<\/[^>]*>.*?(?:bình\s*luận|comments?)/is, // >23</span> bình luận
-                /(\d+(?:[.,]\d+)?)\s*(?:bình\s*luận|comments?)/i,           // general text pattern
+                // Vietnamese/English text patterns in rendered HTML (NUMBER BEFORE TEXT - CRITICAL)
+                />(\d+(?:[.,]\d+)?[KM]?)\s*(?:bình\s*luận|comments?)</i,              // >25 bình luận< or >2.5K comments<
+                />\s*(\d+(?:[.,]\d+)?[KM]?)\s*<\/[^>]*>.*?(?:bình\s*luận|comments?)/is, // >25</span> bình luận
+                /(\d+(?:[.,]\d+)?[KM]?)\s*(?:bình\s*luận|comments?)/i,                // general text pattern
             ];
             
             for (const pattern of commentPatterns) {
                 const match = html.match(pattern);
                 if (match) {
-                    const rawNum = match[1].replace(/[.,]/g, '');
-                    const parsed = parseInt(rawNum);
+                    const parsed = parseMetric(match[1]);
                     if (parsed > 0) {
                         comments = parsed;
-                        console.log(`      📊 [Regex] Comments: ${comments} (pattern: ${pattern.source.substring(0, 35)}...)`);
+                        console.log(`      📊 [Regex] Comments: ${comments} (raw: "${match[1]}", pattern: ${pattern.source.substring(0, 35)}...)`);
                         break;
                     }
                 }
             }
             
             // ============================================
-            // SHARES PATTERNS (ENHANCED - Vietnamese/English)
-            // Priority order: Most specific to most general
+            // SHARES PATTERNS (REFINED v3.2 - Strict matching to avoid false positives)
+            // Priority order: JSON patterns first, then strict text patterns
+            // CRITICAL: Avoid matching dates, comments, or other metrics as shares
             // ============================================
             const sharePatterns = [
-                // GraphQL/JSON patterns (most reliable)
-                /"share_count":\s*\{\s*"count":\s*(\d+)\s*\}/,              // {"share_count":{"count":12}}
-                /share_count:\s*\{\s*count:\s*(\d+)\s*\}/,                  // share_count:{count:12}
-                /"share_count":\s*(\d+)/,                                    // "share_count":12 (direct value)
-                /share_count:\s*(\d+)/,                                      // share_count:12 (unquoted)
-                /"reshare_count":\s*\{\s*"count":\s*(\d+)\s*\}/,            // {"reshare_count":{"count":12}}
-                /reshare_count:\s*\{\s*count:\s*(\d+)\s*\}/,                // reshare_count:{count:12}
-                /"reshares":\s*\{\s*"count":\s*(\d+)\s*\}/,                 // {"reshares":{"count":12}}
-                /"shares":\s*\{\s*"count":\s*(\d+)\s*\}/,                   // {"shares":{"count":12}}
-                /shares:\s*\{\s*count:\s*(\d+)\s*\}/,                       // shares:{count:12}
+                // ========== PRIORITY 1: JSON/GraphQL patterns (most reliable) ==========
+                /"share_count"\s*:\s*\{\s*"count"\s*:\s*(\d+)/,                       // {"share_count":{"count":12}} - PRIORITY JSON
+                /share_count:\s*\{\s*count:\s*(\d+)\s*\}/,                            // share_count:{count:12}
+                /"share_count":\s*(\d+)/,                                              // "share_count":12 (direct value)
+                /share_count:\s*(\d+)/,                                                // share_count:12 (unquoted)
+                /"reshare_count":\s*\{\s*"count":\s*(\d+)\s*\}/,                      // {"reshare_count":{"count":12}}
+                /reshare_count:\s*\{\s*count:\s*(\d+)\s*\}/,                          // reshare_count:{count:12}
+                /"reshares":\s*\{\s*"count":\s*(\d+)\s*\}/,                           // {"reshares":{"count":12}}
+                /"shares":\s*\{\s*"count":\s*(\d+)\s*\}/,                             // {"shares":{"count":12}}
+                /shares:\s*\{\s*count:\s*(\d+)\s*\}/,                                 // shares:{count:12}
                 
-                // HTML attribute patterns
-                /data-share-count="(\d+)"/,                                  // data-share-count="12"
-                /data-shares="(\d+)"/,                                       // data-shares="12"
-                /aria-label="[^"]*?(\d+)\s*(?:shares?|lượt\s*chia\s*sẻ)"/i, // aria-label="12 shares"
+                // ========== PRIORITY 2: HTML attribute patterns (reliable) ==========
+                /data-share-count="(\d+)"/,                                            // data-share-count="12"
+                /data-shares="(\d+)"/,                                                 // data-shares="12"
                 
-                // Vietnamese/English text patterns in rendered HTML (CRITICAL FIX)
-                />(\d+(?:[.,]\d+)?)\s*(?:lượt\s*chia\s*sẻ|shares?)</i,      // >161 lượt chia sẻ< or >161 shares<
-                />\s*(\d+(?:[.,]\d+)?)\s*<\/[^>]*>.*?(?:lượt\s*chia\s*sẻ|shares?)/is, // >161</span> lượt chia sẻ
-                /(?:Chia\s*sẻ|Share)[^0-9]*?(\d+(?:[.,]\d+)?)/i,            // "Chia sẻ 12" or "Share 12"
-                /(\d+(?:[.,]\d+)?)\s*(?:shares?|lượt\s*chia\s*sẻ)/i,        // general pattern
+                // ========== PRIORITY 3: Strict text patterns (NUMBER IMMEDIATELY BEFORE share text) ==========
+                // Vietnamese: "161 lượt chia sẻ" - must have number RIGHT BEFORE the text
+                />(\d+(?:[.,]\d+)?[KM]?)\s*(?:lượt chia sẻ|shares?)\s*</i,           // >161 lượt chia sẻ< (strict: inside tags)
+                /aria-label="[^"]*?(\d+(?:[.,]\d+)?[KM]?)\s*(?:shares?|lượt\s*chia\s*sẻ)"/i, // aria-label="1.2K shares"
+                
+                // More relaxed but still specific patterns
+                />\s*(\d+(?:[.,]\d+)?[KM]?)\s*<\/[^>]*>\s*(?:lượt\s*chia\s*sẻ|shares?)/is, // >161</span> lượt chia sẻ
                 
                 // Embedded JSON patterns
-                /"shareCount":\s*(\d+)/,                                     // "shareCount":12
-                /shareCount:\s*(\d+)/,                                       // shareCount:12
-                /"share_count_reduced":\s*"(\d+)"/,                          // "share_count_reduced":"12"
+                /"shareCount":\s*(\d+)/,                                               // "shareCount":12
+                /shareCount:\s*(\d+)/,                                                 // shareCount:12
+                /"share_count_reduced":\s*"(\d+[KM]?)"/,                              // "share_count_reduced":"1.2K"
             ];
             
             for (const pattern of sharePatterns) {
                 const match = html.match(pattern);
                 if (match) {
-                    const rawNum = match[1].replace(/[.,]/g, '');
-                    const parsed = parseInt(rawNum);
+                    const parsed = parseMetric(match[1]);
                     if (parsed > 0) {
                         shares = parsed;
-                        console.log(`      📊 [Regex] Shares: ${shares} (pattern: ${pattern.source.substring(0, 40)}...)`);
+                        console.log(`      📊 [Regex] Shares: ${shares} (raw: "${match[1]}", pattern: ${pattern.source.substring(0, 40)}...)`);
                         break;
                     }
                 }
