@@ -26,6 +26,7 @@ const facebookAccountRoutes = require('./routes/facebookAccountRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const cloudinaryRoutes = require('./routes/cloudinaryRoutes');
 const userRoutes = require('./routes/userRoutes');
+const resourceSetRoutes = require('./routes/resourceSetRoutes');
 const { createSampleData } = require('./services/linkServiceMongo');
 const { ipFilterMiddleware, getDatabaseStatus } = require('./middleware/ipFilter');
 const User = require('./models/User');
@@ -121,6 +122,9 @@ app.use('/api/campaigns', campaignRoutes);
 
 // Facebook Account Routes - Quản lý tài khoản Facebook
 app.use('/api/facebook-accounts', facebookAccountRoutes);
+
+// Resource Set Routes - Quản lý tập hợp tài nguyên (templates, groups, pages)
+app.use('/api/resource-sets', resourceSetRoutes);
 
 // Account Sync Routes - Extension bg.js sync endpoint
 const accountRoutes = require('./routes/accountRoutes');

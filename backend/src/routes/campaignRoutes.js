@@ -5,6 +5,33 @@ const FacebookAccount = require('../models/FacebookAccount');
 const { authenticate, requireAdmin, authorizeResourceAccess } = require('../middleware/auth');
 
 /**
+ * Helper: Parse textarea/string inputs into arrays
+ * Splits by newline, handles CRLF, trims whitespace, removes empty lines.
+ * @param {String|Array} input - Input value (string or array)
+ * @returns {Array} - Cleaned array of non-empty strings
+ */
+const parseListInput = (input) => {
+    if (!input) return [];
+    
+    // If it's already an array, clean each item
+    if (Array.isArray(input)) {
+        return input
+            .map(x => (typeof x === 'string' ? x.trim() : x))
+            .filter(x => x && (typeof x !== 'string' || x.length > 0));
+    }
+    
+    // If it's a string, split by newline (handles \n and \r\n)
+    if (typeof input === 'string') {
+        return input
+            .split(/\r?\n/) // Split by \n or \r\n
+            .map(s => s.trim())
+            .filter(s => s.length > 0);
+    }
+    
+    return [];
+};
+
+/**
  * Campaign Routes
  * 
  * POST   /api/campaigns - Tạo campaign mới
@@ -29,6 +56,16 @@ const { authenticate, requireAdmin, authorizeResourceAccess } = require('../midd
  */
 router.post('/', authenticate, async (req, res) => {
     try {
+        // ============================================
+        // PARSE LIST INPUTS (String -> Array)
+        // Frontend sends newline-separated strings from textareas
+        // ============================================
+        req.body.slugs = parseListInput(req.body.slugs);
+        req.body.commentTemplates = parseListInput(req.body.commentTemplates);
+        req.body.targetPostIds = parseListInput(req.body.targetPostIds);
+        req.body.linkGroups = parseListInput(req.body.linkGroups);
+        req.body.fanpages = parseListInput(req.body.fanpages);
+        
         const {
             name,
             description,
@@ -48,8 +85,8 @@ router.post('/', authenticate, async (req, res) => {
             facebookAccountId
         } = req.body;
         
-        // Log request body for debugging
-        console.log('📝 [Campaign Create] Request body:', {
+        // Log request body for debugging (after parsing)
+        console.log('📝 [Campaign Create] Request body (parsed):', {
             name,
             slugsCount: slugs?.length,
             templatesCount: commentTemplates?.length,
@@ -240,12 +277,13 @@ router.get('/', authenticate, async (req, res) => {
 /**
  * GET /api/campaigns/:id
  * Lấy chi tiết campaign
+ * Ensures all necessary data is populated for Frontend Edit Form
  */
 router.get('/:id', authenticate, async (req, res) => {
     try {
         const campaign = await Campaign.findById(req.params.id)
-            .populate('facebookAccountId', 'name profileUrl email isActive tokenStatus')
-            .populate('userId', 'username fullName');
+            .populate('facebookAccountId', '_id name profileUrl email isActive tokenStatus accountName')
+            .populate('userId', '_id username fullName');
         
         if (!campaign) {
             return res.status(404).json({
@@ -262,9 +300,19 @@ router.get('/:id', authenticate, async (req, res) => {
             });
         }
         
+        // Convert to plain object to ensure filters are properly serialized
+        const campaignData = campaign.toObject();
+        
+        // Ensure filters object exists with defaults
+        campaignData.filters = {
+            minLikes: campaign.filters?.minLikes ?? 0,
+            minComments: campaign.filters?.minComments ?? 0,
+            minShares: campaign.filters?.minShares ?? 0
+        };
+        
         return res.json({
             success: true,
-            data: campaign
+            data: campaignData
         });
         
     } catch (error) {
@@ -308,6 +356,16 @@ router.put('/:id', authenticate, async (req, res) => {
             });
         }
         
+        // ============================================
+        // PARSE LIST INPUTS (String -> Array)
+        // Frontend sends newline-separated strings from textareas
+        // ============================================
+        if (req.body.slugs !== undefined) req.body.slugs = parseListInput(req.body.slugs);
+        if (req.body.commentTemplates !== undefined) req.body.commentTemplates = parseListInput(req.body.commentTemplates);
+        if (req.body.targetPostIds !== undefined) req.body.targetPostIds = parseListInput(req.body.targetPostIds);
+        if (req.body.linkGroups !== undefined) req.body.linkGroups = parseListInput(req.body.linkGroups);
+        if (req.body.fanpages !== undefined) req.body.fanpages = parseListInput(req.body.fanpages);
+        
         const {
             name,
             description,
@@ -322,7 +380,8 @@ router.put('/:id', authenticate, async (req, res) => {
             delayMin,
             delayMax,
             linkGroups,
-            fanpages
+            fanpages,
+            targetPostIds
         } = req.body;
         
         // Update fields
@@ -340,6 +399,7 @@ router.put('/:id', authenticate, async (req, res) => {
         if (delayMax !== undefined) campaign.delayMax = delayMax;
         if (linkGroups !== undefined) campaign.linkGroups = linkGroups;
         if (fanpages !== undefined) campaign.fanpages = fanpages;
+        if (targetPostIds !== undefined) campaign.targetPostIds = targetPostIds;
         
         await campaign.save();
         await campaign.populate('facebookAccountId', 'name profileUrl');

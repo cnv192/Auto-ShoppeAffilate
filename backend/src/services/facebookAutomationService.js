@@ -398,6 +398,414 @@ class FacebookAPI {
             throw error;
         }
     }
+
+    /**
+     * Get post stats using Cookie-based GraphQL API
+     * Used when OAuth token is not available (cookie_only mode)
+     * @param {String} postId - Facebook Post ID
+     * @param {String} dtsg - Facebook DTSG token
+     * @param {String} postUrl - Optional post URL for HTML fallback
+     * @returns {Object} - { id, likes, comments, shares, success, error }
+     */
+    async getPostStatsWithCookie(postId, dtsg, postUrl = null) {
+        console.log(`\n📊 [Get Post Stats] Fetching stats for post: ${postId}`);
+        
+        try {
+            if (!this.cookie) {
+                console.error('❌ [Get Post Stats] No cookie available');
+                return { id: postId, likes: 0, comments: 0, shares: 0, success: false, error: 'No cookie' };
+            }
+            
+            // Extract User ID from cookie
+            const userId = this._extractUserId(this.cookie);
+            if (!userId) {
+                console.error('❌ [Get Post Stats] Cannot extract User ID from cookie');
+                return { id: postId, likes: 0, comments: 0, shares: 0, success: false, error: 'No user ID' };
+            }
+            
+            // ============================================
+            // ATTEMPT 1: GraphQL CometUFIFeedbackQuery
+            // ============================================
+            console.log(`   📡 [Attempt 1] Trying GraphQL CometUFIFeedbackQuery...`);
+            
+            // Generate feedback ID (Base64 encoded "feedback:{postId}")
+            const feedbackId = this._encodeFeedbackId(postId);
+            console.log(`   🔑 Feedback ID: ${feedbackId}`);
+            
+            // Build GraphQL variables for fetching feedback data
+            const variables = {
+                feedbackTargetID: feedbackId,
+                feedLocation: "DEDICATED_COMMENTING_SURFACE",
+                useDefaultActor: false,
+                scale: 1
+            };
+            
+            // Build form data
+            const formData = new URLSearchParams();
+            formData.append('av', userId);
+            formData.append('__user', userId);
+            formData.append('__a', '1');
+            if (dtsg) {
+                formData.append('fb_dtsg', dtsg);
+                formData.append('jazoest', this._generateJazoest(dtsg));
+            }
+            formData.append('fb_api_caller_class', 'RelayModern');
+            formData.append('fb_api_req_friendly_name', 'CometUFIFeedbackQuery');
+            formData.append('doc_id', '5587197327998288'); // Feedback query doc_id
+            formData.append('variables', JSON.stringify(variables));
+            
+            const headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Origin': 'https://www.facebook.com',
+                'Referer': 'https://www.facebook.com/',
+                'Cookie': this.cookie,
+                'Sec-Fetch-Site': 'same-origin',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Dest': 'empty'
+            };
+            
+            let graphqlStats = null;
+            
+            try {
+                const response = await fetch('https://www.facebook.com/api/graphql/', {
+                    method: 'POST',
+                    headers,
+                    body: formData.toString()
+                });
+                
+                if (response.ok) {
+                    const responseText = await response.text();
+                    graphqlStats = this._parseStatsFromGraphQL(responseText, postId);
+                    
+                    if (graphqlStats && (graphqlStats.likes > 0 || graphqlStats.comments > 0 || graphqlStats.shares > 0)) {
+                        console.log(`   ✅ [GraphQL] Success: Likes=${graphqlStats.likes}, Comments=${graphqlStats.comments}, Shares=${graphqlStats.shares}`);
+                        return { ...graphqlStats, success: true, method: 'graphql' };
+                    }
+                    console.log(`   ⚠️ [GraphQL] Returned zero stats, trying HTML fallback...`);
+                }
+            } catch (gqlError) {
+                console.log(`   ⚠️ [GraphQL] Error: ${gqlError.message}, trying HTML fallback...`);
+            }
+            
+            // ============================================
+            // ATTEMPT 2: HTML Page Fetch (Fallback)
+            // ============================================
+            console.log(`   📡 [Attempt 2] Trying HTML page fetch fallback...`);
+            
+            // Build post URL if not provided
+            const targetUrl = postUrl || `https://www.facebook.com/${postId}`;
+            console.log(`   🔗 Fetching: ${targetUrl}`);
+            
+            const htmlHeaders = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Upgrade-Insecure-Requests': '1',
+                'Cookie': this.cookie
+            };
+            
+            try {
+                const htmlResponse = await fetch(targetUrl, {
+                    method: 'GET',
+                    headers: htmlHeaders,
+                    redirect: 'follow'
+                });
+                
+                if (htmlResponse.ok) {
+                    const html = await htmlResponse.text();
+                    const htmlStats = this._parseStatsFromHTML(html, postId);
+                    
+                    if (htmlStats && (htmlStats.likes > 0 || htmlStats.comments > 0 || htmlStats.shares > 0)) {
+                        console.log(`   ✅ [HTML] Success: Likes=${htmlStats.likes}, Comments=${htmlStats.comments}, Shares=${htmlStats.shares}`);
+                        return { ...htmlStats, success: true, method: 'html_fallback' };
+                    }
+                    console.log(`   ⚠️ [HTML] Could not extract stats from page`);
+                }
+            } catch (htmlError) {
+                console.log(`   ⚠️ [HTML] Error: ${htmlError.message}`);
+            }
+            
+            // ============================================
+            // ATTEMPT 3: Direct Post Permalink Fetch
+            // ============================================
+            console.log(`   📡 [Attempt 3] Trying direct permalink fetch...`);
+            
+            const permalinkUrl = `https://www.facebook.com/permalink.php?story_fbid=${postId}&id=0`;
+            
+            try {
+                const permalinkResponse = await fetch(permalinkUrl, {
+                    method: 'GET',
+                    headers: htmlHeaders,
+                    redirect: 'follow'
+                });
+                
+                if (permalinkResponse.ok) {
+                    const html = await permalinkResponse.text();
+                    const permalinkStats = this._parseStatsFromHTML(html, postId);
+                    
+                    if (permalinkStats && (permalinkStats.likes > 0 || permalinkStats.comments > 0 || permalinkStats.shares > 0)) {
+                        console.log(`   ✅ [Permalink] Success: Likes=${permalinkStats.likes}, Comments=${permalinkStats.comments}, Shares=${permalinkStats.shares}`);
+                        return { ...permalinkStats, success: true, method: 'permalink_fallback' };
+                    }
+                }
+            } catch (permalinkError) {
+                console.log(`   ⚠️ [Permalink] Error: ${permalinkError.message}`);
+            }
+            
+            // All attempts failed - return zero stats but mark as success to not block campaign
+            console.log(`   ⚠️ [Get Post Stats] All attempts failed, returning zero stats`);
+            return { 
+                id: postId, 
+                likes: 0, 
+                comments: 0, 
+                shares: 0, 
+                success: true, // Mark as success so campaign doesn't fail
+                method: 'fallback_zero',
+                warning: 'Could not fetch actual stats, using zero values'
+            };
+            
+        } catch (error) {
+            console.error('❌ [Get Post Stats] Exception:', error.message);
+            return { id: postId, likes: 0, comments: 0, shares: 0, success: false, error: error.message };
+        }
+    }
+    
+    /**
+     * Parse stats from GraphQL response
+     * @private
+     */
+    _parseStatsFromGraphQL(responseText, postId) {
+        try {
+            // Try to parse as JSON
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                // Facebook sometimes returns multiple JSON objects
+                const firstJson = responseText.split('\n')[0];
+                data = JSON.parse(firstJson);
+            }
+            
+            // Try structured data paths
+            const feedback = data?.data?.feedback || data?.data?.node;
+            
+            if (feedback) {
+                return {
+                    id: postId,
+                    likes: feedback.reaction_count?.count || feedback.likers?.count || 0,
+                    comments: feedback.total_comment_count || feedback.comment_count?.total_count || 0,
+                    shares: feedback.share_count?.count || 0
+                };
+            }
+            
+            // Fallback: Regex extraction from raw text
+            return this._parseStatsFromHTML(responseText, postId);
+            
+        } catch (e) {
+            return null;
+        }
+    }
+    
+    /**
+     * Parse stats from HTML/raw text using regex patterns
+     * @private
+     */
+    _parseStatsFromHTML(html, postId) {
+        try {
+            let likes = 0, comments = 0, shares = 0;
+            
+            // ============================================
+            // LIKES/REACTIONS PATTERNS (try multiple)
+            // Priority: Structured JSON > Aria labels > Text patterns
+            // ============================================
+            const likePatterns = [
+                // JSON/GraphQL patterns (most reliable)
+                /"reaction_count":\s*\{\s*"count":\s*(\d+)\s*\}/,           // {"reaction_count":{"count":123}}
+                /reaction_count:\s*\{\s*count:\s*(\d+)\s*\}/,               // reaction_count:{count:123}
+                /"likers":\s*\{\s*"count":\s*(\d+)\s*\}/,                   // {"likers":{"count":123}}
+                /likers:\s*\{\s*count:\s*(\d+)\s*\}/,                       // likers:{count:123}
+                /"reactors":\s*\{\s*"count":\s*(\d+)\s*\}/,                 // {"reactors":{"count":123}}
+                /"reaction_count":(\d+)/,                                    // "reaction_count":123
+                
+                // HTML attribute patterns
+                /data-reaction-count="(\d+)"/,                               // data-reaction-count="123"
+                /aria-label="[^"]*?(\d+)\s*(?:người|people)/i,              // aria-label="... 123 người"
+                
+                // Vietnamese text patterns in rendered HTML
+                />Tất cả cảm xúc:[^<]*?(\d+(?:[.,]\d+)?)</i,               // >Tất cả cảm xúc: 467<
+                />(\d+(?:[.,]\d+)?)\s*(?:người\s*thích|người|people)</i,   // >467 người thích<
+                /aria-label="(?:Thích|Yêu thích|Like|Love|Haha|Wow|Buồn|Phẫn nộ|Sad|Angry)[^"]*?(\d+)\s*(?:người|people)"/i,
+                
+                // General text patterns
+                /(\d+(?:[.,]\d+)?)\s*(?:reactions?|likes?|người\s*thích)/i, // "123 reactions" or "123 likes"
+            ];
+            
+            for (const pattern of likePatterns) {
+                const match = html.match(pattern);
+                if (match) {
+                    // Handle numbers with commas or dots (e.g., "1,234" or "1.234")
+                    const rawNum = match[1].replace(/[.,]/g, '');
+                    const parsed = parseInt(rawNum);
+                    if (parsed > 0) {
+                        likes = parsed;
+                        console.log(`      📊 [Regex] Likes: ${likes} (pattern: ${pattern.source.substring(0, 35)}...)`);
+                        break;
+                    }
+                }
+            }
+            
+            // ============================================
+            // COMMENTS PATTERNS (try multiple)
+            // Priority: Structured JSON > Aria labels > Text patterns
+            // ============================================
+            const commentPatterns = [
+                // JSON/GraphQL patterns (most reliable)
+                /"total_comment_count":\s*(\d+)/,                            // "total_comment_count":45
+                /total_comment_count:\s*(\d+)/,                              // total_comment_count:45
+                /"comment_count":\s*\{\s*"total_count":\s*(\d+)\s*\}/,      // {"comment_count":{"total_count":45}}
+                /comment_count:\s*\{\s*total_count:\s*(\d+)\s*\}/,          // comment_count:{total_count:45}
+                /"comments":\s*\{\s*"total_count":\s*(\d+)\s*\}/,           // {"comments":{"total_count":45}}
+                /"comment_count":(\d+)/,                                     // "comment_count":45
+                
+                // HTML attribute patterns  
+                /data-comment-count="(\d+)"/,                                // data-comment-count="45"
+                /aria-label="[^"]*?(\d+)\s*(?:bình luận|comments?)"/i,      // aria-label="23 bình luận"
+                
+                // Vietnamese/English text patterns in rendered HTML (CRITICAL FIX)
+                />(\d+(?:[.,]\d+)?)\s*(?:bình\s*luận|comments?)</i,         // >23 bình luận< or >23 comments<
+                />\s*(\d+(?:[.,]\d+)?)\s*<\/[^>]*>.*?(?:bình\s*luận|comments?)/is, // >23</span> bình luận
+                /(\d+(?:[.,]\d+)?)\s*(?:bình\s*luận|comments?)/i,           // general text pattern
+            ];
+            
+            for (const pattern of commentPatterns) {
+                const match = html.match(pattern);
+                if (match) {
+                    const rawNum = match[1].replace(/[.,]/g, '');
+                    const parsed = parseInt(rawNum);
+                    if (parsed > 0) {
+                        comments = parsed;
+                        console.log(`      📊 [Regex] Comments: ${comments} (pattern: ${pattern.source.substring(0, 35)}...)`);
+                        break;
+                    }
+                }
+            }
+            
+            // ============================================
+            // SHARES PATTERNS (ENHANCED - Vietnamese/English)
+            // Priority order: Most specific to most general
+            // ============================================
+            const sharePatterns = [
+                // GraphQL/JSON patterns (most reliable)
+                /"share_count":\s*\{\s*"count":\s*(\d+)\s*\}/,              // {"share_count":{"count":12}}
+                /share_count:\s*\{\s*count:\s*(\d+)\s*\}/,                  // share_count:{count:12}
+                /"share_count":\s*(\d+)/,                                    // "share_count":12 (direct value)
+                /share_count:\s*(\d+)/,                                      // share_count:12 (unquoted)
+                /"reshare_count":\s*\{\s*"count":\s*(\d+)\s*\}/,            // {"reshare_count":{"count":12}}
+                /reshare_count:\s*\{\s*count:\s*(\d+)\s*\}/,                // reshare_count:{count:12}
+                /"reshares":\s*\{\s*"count":\s*(\d+)\s*\}/,                 // {"reshares":{"count":12}}
+                /"shares":\s*\{\s*"count":\s*(\d+)\s*\}/,                   // {"shares":{"count":12}}
+                /shares:\s*\{\s*count:\s*(\d+)\s*\}/,                       // shares:{count:12}
+                
+                // HTML attribute patterns
+                /data-share-count="(\d+)"/,                                  // data-share-count="12"
+                /data-shares="(\d+)"/,                                       // data-shares="12"
+                /aria-label="[^"]*?(\d+)\s*(?:shares?|lượt\s*chia\s*sẻ)"/i, // aria-label="12 shares"
+                
+                // Vietnamese/English text patterns in rendered HTML (CRITICAL FIX)
+                />(\d+(?:[.,]\d+)?)\s*(?:lượt\s*chia\s*sẻ|shares?)</i,      // >161 lượt chia sẻ< or >161 shares<
+                />\s*(\d+(?:[.,]\d+)?)\s*<\/[^>]*>.*?(?:lượt\s*chia\s*sẻ|shares?)/is, // >161</span> lượt chia sẻ
+                /(?:Chia\s*sẻ|Share)[^0-9]*?(\d+(?:[.,]\d+)?)/i,            // "Chia sẻ 12" or "Share 12"
+                /(\d+(?:[.,]\d+)?)\s*(?:shares?|lượt\s*chia\s*sẻ)/i,        // general pattern
+                
+                // Embedded JSON patterns
+                /"shareCount":\s*(\d+)/,                                     // "shareCount":12
+                /shareCount:\s*(\d+)/,                                       // shareCount:12
+                /"share_count_reduced":\s*"(\d+)"/,                          // "share_count_reduced":"12"
+            ];
+            
+            for (const pattern of sharePatterns) {
+                const match = html.match(pattern);
+                if (match) {
+                    const rawNum = match[1].replace(/[.,]/g, '');
+                    const parsed = parseInt(rawNum);
+                    if (parsed > 0) {
+                        shares = parsed;
+                        console.log(`      📊 [Regex] Shares: ${shares} (pattern: ${pattern.source.substring(0, 40)}...)`);
+                        break;
+                    }
+                }
+            }
+            
+            // ============================================
+            // SECONDARY SCAN (if primary patterns failed)
+            // ============================================
+            if (shares === 0) {
+                // Look for share counts in feedback data structures
+                const feedbackShareMatch = html.match(/"feedback"[^}]*"share_count"[^}]*"count":\s*(\d+)/);
+                if (feedbackShareMatch && parseInt(feedbackShareMatch[1]) > 0) {
+                    shares = parseInt(feedbackShareMatch[1]);
+                    console.log(`      📊 [Regex] Shares (feedback): ${shares}`);
+                }
+                
+                // Look for comet share pattern (new Facebook UI)
+                if (!shares) {
+                    const cometShareMatch = html.match(/CometUFIShareActionLink[^}]*count[":]+(\d+)/);
+                    if (cometShareMatch && parseInt(cometShareMatch[1]) > 0) {
+                        shares = parseInt(cometShareMatch[1]);
+                        console.log(`      📊 [Regex] Shares (comet): ${shares}`);
+                    }
+                }
+            }
+            
+            if (comments === 0) {
+                // Secondary comment patterns
+                const feedbackCommentMatch = html.match(/"feedback"[^}]*"comment_count"[^}]*"total_count":\s*(\d+)/);
+                if (feedbackCommentMatch && parseInt(feedbackCommentMatch[1]) > 0) {
+                    comments = parseInt(feedbackCommentMatch[1]);
+                    console.log(`      📊 [Regex] Comments (feedback): ${comments}`);
+                }
+            }
+            
+            if (likes === 0) {
+                // Sum up individual reaction types if total not found
+                const reactionTypes = ['Like', 'Love', 'Haha', 'Wow', 'Sad', 'Angry', 'Thích', 'Yêu thích'];
+                let reactionSum = 0;
+                for (const type of reactionTypes) {
+                    const reactionMatch = html.match(new RegExp(`${type}[^0-9]*?(\\d+)\\s*(?:người|people)`, 'i'));
+                    if (reactionMatch) {
+                        reactionSum += parseInt(reactionMatch[1]);
+                    }
+                }
+                if (reactionSum > 0) {
+                    likes = reactionSum;
+                    console.log(`      📊 [Regex] Likes (sum): ${likes}`);
+                }
+            }
+            
+            // Log final result
+            const result = { id: postId, likes, comments, shares };
+            console.log(`      📊 [Final Stats] Likes=${likes}, Comments=${comments}, Shares=${shares}`);
+            
+            return result;
+            
+        } catch (e) {
+            console.log(`      ⚠️ [Regex] Parse error: ${e.message}`);
+            return null;
+        }
+    }
     
     /**
      * Post a comment to Facebook
@@ -528,35 +936,35 @@ class FacebookAPI {
      * @param {String} text - Message text that may contain URLs
      * @returns {Array} Array of entity objects: [{ entity: { __typename: "ExternalUrl", url: ... }, offset: ..., length: ... }]
      */
+    /**
+     * Helper: Generate message ranges for URL linkification
+     * Detects all URLs in the message and creates entity ranges for Facebook to render as clickable links
+     * 
+     * @param {String} text - Message text that may contain URLs
+     * @returns {Array} Array of entity objects: [{ entity: { url: ... }, offset: ..., length: ... }]
+     */
     _generateMessageRanges(text) {
-        if (!text) return [];
-        
-        // Regex to detect URLs (http/https)
-        const urlRegex = /(https?:\/\/[^\s]+)/g;
         const ranges = [];
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
         let match;
         
         while ((match = urlRegex.exec(text)) !== null) {
-            const url = match[0];
-            const offset = match.index;
-            const length = url.length;
-            
             ranges.push({
                 entity: {
-                    __typename: "ExternalUrl",
-                    url: url
+                    url: match[0] 
                 },
-                offset: offset,
-                length: length
+                offset: match.index,
+                length: match[0].length 
             });
         }
         
-        if (ranges.length > 0) {
-            console.log(`🔗 [Linkify] Detected ${ranges.length} URL(s) in message`);
-            ranges.forEach((range, idx) => {
-                console.log(`   ${idx + 1}. "${range.entity.url}" at offset ${range.offset}`);
-            });
-        }
+        // No need for explicit check for ranges.length > 0 if we always return ranges
+        // if (ranges.length > 0) {
+        //     console.log(`🔗 [Linkify] Detected ${ranges.length} URL(s) in message`);
+        //     ranges.forEach((range, idx) => {
+        //         console.log(`   ${idx + 1}. "${range.entity.url}" at offset ${range.offset}`);
+        //     });
+        // }
         
         return ranges;
     }
@@ -598,6 +1006,28 @@ class FacebookAPI {
         
         console.log(`ℹ️ [Extract Group ID] No group ID found - this is a regular post (not in a group)`);
         return null;
+    }
+
+    /**
+     * Helper: Clean GraphQL payload by removing null/undefined values
+     * Facebook GraphQL strict mode rejects null for optional fields
+     * @param {Object} obj - Raw object with potential null values
+     * @returns {Object} - Cleaned object with nulls removed
+     */
+    _cleanPayload(obj) {
+        return Object.entries(obj).reduce((acc, [key, value]) => {
+            // Keep strictly false booleans and 0, but remove null/undefined
+            if (value !== null && value !== undefined) {
+                // Recursive clean for objects (like 'input')
+                if (typeof value === 'object' && !Array.isArray(value)) {
+                    const cleaned = this._cleanPayload(value);
+                    if (Object.keys(cleaned).length > 0) acc[key] = cleaned;
+                } else {
+                    acc[key] = value;
+                }
+            }
+            return acc;
+        }, {});
     }
 
     /**
@@ -652,12 +1082,15 @@ class FacebookAPI {
             console.log(`✅ [Validation] DTSG: ${dtsg.substring(0, 20)}...`);
             
             // === DETERMINE MODE ===
-            const isReplyMode = options.parentCommentId && /^\d+$/.test(options.parentCommentId);
+            // ✅ FIX: Accept Base64 parentCommentId (not just numeric)
+            // Base64 format is required for DEDICATED_COMMENTING_SURFACE
+            // Examples: "Y29tbWVudDoxMjM0NTY3ODk=" or numeric "123456789"
+            const isReplyMode = options.parentCommentId && options.parentCommentId.length > 0;
             const mode = isReplyMode ? 'B' : 'A';
             
             console.log(`\n📋 [Mode] ${mode} (${isReplyMode ? 'Reply to Comment' : 'Direct Comment'})`);
             if (isReplyMode) {
-                console.log(`   Parent Comment ID: ${options.parentCommentId}`);
+                console.log(`   Parent Comment ID (Base64): ${options.parentCommentId}`);
                 console.log(`   Target Name: ${options.targetName || 'Not provided'}`);
             }
             
@@ -686,13 +1119,42 @@ class FacebookAPI {
             // === GENERATE TOKENS ===
             const jazoest = this._generateJazoest(dtsg);
             const lsd = this._extractLSD(this.cookie) || dtsg; // Fallback to dtsg if no LSD
-            const feedbackId = this._encodeFeedbackId(postId);
             
-            console.log(`\n🔐 [Tokens]`);
-            console.log(`   jazoest: ${jazoest}`);
-            console.log(`   lsd: ${lsd.substring(0, 20)}...`);
-            console.log(`   feedback_id (Base64): ${feedbackId}`);
+            // 1. Calculate default Feedback ID (for Post - Top Level Comment)
+            let feedbackId = this._encodeFeedbackId(postId);
             
+            // 2. [CRITICAL FIX] If Reply Mode, derive Feedback ID from Parent Comment ID
+            // Browser payload shows feedback_id must be "feedback:POSTID_COMMENTID" for replies
+            // NOT "feedback:POSTID" which causes replies to post as top-level comments
+            if (options.parentCommentId) {
+                try {
+                    const parentDecoded = Buffer.from(options.parentCommentId, 'base64').toString('utf-8');
+                    // Parent ID format is usually "comment:POSTID_COMMENTID" or "fbid:POSTID_COMMENTID"
+                    // We need to convert it to "feedback:POSTID_COMMENTID"
+                    
+                    // Simple regex replace to preserve the IDs structure
+                    const replyFeedbackString = parentDecoded.replace(/^(comment|fbid):/, 'feedback:');
+                    
+                    feedbackId = Buffer.from(replyFeedbackString).toString('base64');
+                    console.log(`\n🔐 [Tokens - Reply Mode]`);
+                    console.log(`   jazoest: ${jazoest}`);
+                    console.log(`   lsd: ${lsd.substring(0, 20)}...`);
+                    console.log(`   🔄 Parent Comment ID decoded: ${parentDecoded}`);
+                    console.log(`   🔄 Adjusted feedback_id string: ${replyFeedbackString}`);
+                    console.log(`   🔄 feedback_id (Base64): ${feedbackId}`);
+                } catch (e) {
+                    console.warn(`   ⚠️ [Reply Mode] Failed to generate threaded feedback_id, using default post feedback_id.`);
+                    console.log(`\n🔐 [Tokens - Fallback]`);
+                    console.log(`   jazoest: ${jazoest}`);
+                    console.log(`   lsd: ${lsd.substring(0, 20)}...`);
+                    console.log(`   feedback_id (Base64): ${feedbackId}`);
+                }
+            } else {
+                console.log(`\n🔐 [Tokens - Top Level Comment]`);
+                console.log(`   jazoest: ${jazoest}`);
+                console.log(`   lsd: ${lsd.substring(0, 20)}...`);
+                console.log(`   feedback_id (Base64): ${feedbackId}`);
+            }
             // === GENERATE UUIDs ===
             const clientMutationId = this._generateUUID();
             const idempotenceToken = this._generateUUID();
@@ -726,7 +1188,7 @@ class FacebookAPI {
             // Force null if still undefined
             groupId = groupId || null;
             
-            // feedbackSource MUST be an Integer: 0 for Group, 110 for Feed
+            // feedbackSource MUST be an Integer: 0 for Group, 110 for Feed (matches browser)
             const feedbackSource = groupId ? 0 : 110;
             
             if (groupId) {
@@ -736,66 +1198,111 @@ class FacebookAPI {
             } else {
                 console.log(`\n📄 [Post Type] Regular post (not in a group)`);
                 console.log(`   groupID: null (explicitly set)`);
-                console.log(`   feedbackSource: ${feedbackSource} (Integer)`);
+                console.log(`   feedbackSource: ${feedbackSource} (Integer - DEDICATED_COMMENTING_SURFACE)`);
             }
             
-            // === GENERATE MESSAGE RANGES (LINKIFY URLs) ===
-            const messageRanges = this._generateMessageRanges(processedMessage);
+            // === MESSAGE RANGES - DISABLED (Emoji Length Mismatch Fix) ===
+            // JavaScript counts emojis as 2 chars, GraphQL counts as 1
+            // This causes offset/length mismatch triggering noncoercible_variable_value
+            // Solution: Force empty ranges, let Facebook auto-detect and linkify URLs
+            const messageRanges = []; // ✅ FIXED: Always empty to prevent Emoji offset errors
+            console.log(`\n🔗 [Linkify] Auto-linkify mode (ranges=[] to avoid emoji mismatch)`);
             
-            // === BUILD GRAPHQL VARIABLES - STRICT NULLABLE HANDLING ===
-            // All keys MUST exist. Use null instead of undefined to prevent JSON.stringify from removing them.
+            // === BUILD GRAPHQL VARIABLES - BROWSER-MATCHED PAYLOAD ===
+            // ✅ CRITICAL FIX: Use Base64 ID directly for reply_comment_parent_fbid
+            // Browser payload analysis shows Base64 is the correct format when using
+            // feedLocation: "DEDICATED_COMMENTING_SURFACE"
+            
+            // ✅ FIX: Use Base64 directly. Do NOT convert to Numeric (API rejects it).
+            const replyBase64Id = options.parentCommentId || null;
+            
+            // Log reply mode if applicable
+            if (replyBase64Id) {
+                console.log(`\n🔄 [Reply Mode] Using Base64 parent comment ID directly`);
+                console.log(`   📥 Parent Comment ID (Base64): ${replyBase64Id}`);
+                console.log(`   ℹ️  Note: Using Base64 format as required by DEDICATED_COMMENTING_SURFACE`);
+                console.log(`   ℹ️  focusCommentID will also be set to enable proper nesting`);
+            }
+
+            // === BUILD GRAPHQL VARIABLES ===
+            // CRITICAL: reply_comment_parent_fbid MUST be Base64 ID (matching browser behavior)
             const variables = {
                 feedLocation: "DEDICATED_COMMENTING_SURFACE",
-                feedbackSource: feedbackSource, // Integer: 0 or 110
-                groupID: groupId, // CRITICAL: Must exist, null or string
+                feedbackSource: feedbackSource, // 0 for Group, 110 for Feed
+                groupID: groupId || null,
                 input: {
                     client_mutation_id: clientMutationId,
                     actor_id: userId,
-                    attachments: null, // Explicitly null
-                    feedback_id: feedbackId, // Base64 encoded
-                    formatting_style: null, // Explicitly null
+                    attachments: null,
+                    feedback_id: feedbackId,
+                    formatting_style: null,
                     message: {
-                        ranges: messageRanges, // LINKIFY: Array of URL entity ranges
+                        ranges: messageRanges,
                         text: processedMessage
                     },
                     is_tracking_encrypted: true,
-                    tracking: [], // Empty array
+                    tracking: [],
                     feedback_source: "DEDICATED_COMMENTING_SURFACE",
                     idempotence_token: idempotenceToken,
                     session_id: sessionId,
-                    // CRITICAL FOR REPLY MODE B: Add parent_comment_id if replying to a comment
-                    ...(options.parentCommentId ? { parent_comment_id: options.parentCommentId } : {})
+                    
+                    // ✅ REPLY LOGIC: Use Base64 ID (Do NOT decode to numeric)
+                    ...(replyBase64Id ? {
+                        reply_comment_parent_fbid: replyBase64Id, // Base64 ID
+                        reply_target_clicked: true
+                    } : {})
                 },
-                inviteShortLinkKey: null, // Explicitly null
-                renderLocation: null, // Explicitly null
+                inviteShortLinkKey: null,
+                renderLocation: null,
                 scale: 1,
                 useDefaultActor: false,
-                focusCommentID: null, // Explicitly null
-                // RELAY FLAGS - Required for proper GraphQL response handling
+                
+                // ✅ CRITICAL FIX: Set focus to the Parent Comment ID (Base64) to force nesting
+                // When null, reply appears as top-level. Must be Base64 for proper threading.
+                focusCommentID: replyBase64Id,
+                
+                // Relay Flags
                 __relay_internal__pv__CometUFICommentAvatarStickerAnimatedImagerelayprovider: false,
                 __relay_internal__pv__IsWorkUserrelayprovider: false,
                 __relay_internal__pv__CometUFIShareActionMigrationrelayprovider: true
             };
             
-            // Log Mode B addition
-            if (options.parentCommentId) {
-                console.log(`\n↩️  [Mode B REPLY] Added parent_comment_id: ${options.parentCommentId}`);
-                console.log(`   This will REPLY to comment ${options.parentCommentId}, not post a top-level comment`);
+            // Log payload details
+            console.log(`\n📦 [Variables - Browser Matched (DEDICATED_COMMENTING_SURFACE)]`);
+            console.log(`   feedLocation: DEDICATED_COMMENTING_SURFACE`);
+            console.log(`   feedbackSource: ${feedbackSource}`);
+            console.log(`   groupID: ${groupId || 'omitted (cleaned)'}`);
+            console.log(`   feedback_source (input): DEDICATED_COMMENTING_SURFACE`);
+            console.log(`   focusCommentID: ${replyBase64Id || 'null (top-level comment)'}`);
+            console.log(`   ranges: [] (auto-linkify mode)`);
+            if (replyBase64Id) {
+                console.log(`   🔄 REPLY MODE: reply_comment_parent_fbid set (Base64 ID)`);
+                console.log(`      Parent Comment ID: ${replyBase64Id}`);
+                console.log(`      focusCommentID: ${replyBase64Id} (enables proper nesting)`);
+            } else {
+                console.log(`   💬 TOP-LEVEL COMMENT MODE`);
             }
             
-            // === DEBUG: Log final variables string to verify all keys exist ===
+            // === DEBUG: Log final variables string ===
             const variablesString = JSON.stringify(variables);
             console.log(`\n📦 [Variables] Final JSON (${variablesString.length} chars):`);
             console.log(JSON.stringify(variables, null, 2));
             
-            // Verify critical keys exist
+            // Verify critical keys (Universal Payload - cleaned)
             const parsedCheck = JSON.parse(variablesString);
-            console.log(`\n🔍 [Validation] Critical keys check:`);
-            console.log(`   groupID exists: ${'groupID' in parsedCheck}`);
-            console.log(`   groupID value: ${parsedCheck.groupID}`);
-            console.log(`   feedbackSource exists: ${'feedbackSource' in parsedCheck}`);
-            console.log(`   feedbackSource value: ${parsedCheck.feedbackSource}`);
-            console.log(`   input.feedback_id exists: ${'feedback_id' in parsedCheck.input}`);
+            console.log(`\n🔍 [Validation] Universal Payload Check:`);
+            console.log(`   feedLocation: ${parsedCheck.feedLocation || 'OMITTED ✅'}`);
+            console.log(`   feedbackSource: ${parsedCheck.feedbackSource} (type: ${typeof parsedCheck.feedbackSource})`);
+            console.log(`   groupID: ${parsedCheck.groupID !== undefined ? parsedCheck.groupID : 'OMITTED ✅'}`);
+            console.log(`   input.feedback_source: ${parsedCheck.input?.feedback_source || 'OMITTED ✅'}`);
+            console.log(`   input.attachments: ${parsedCheck.input?.attachments !== undefined ? parsedCheck.input.attachments : 'OMITTED ✅'}`);
+            console.log(`   input.is_tracking_encrypted: ${parsedCheck.input?.is_tracking_encrypted}`);
+            console.log(`   input.tracking: ${Array.isArray(parsedCheck.input?.tracking) ? 'Array ✅' : 'OMITTED'}`);
+            console.log(`   Reply mode: ${parsedCheck.input?.reply_comment_parent_fbid ? 'YES ✅' : 'NO (top-level comment)'}`);
+            
+            // Confirm nulls were cleaned
+            const hasNulls = variablesString.includes(':null');
+            console.log(`   Nulls cleaned: ${hasNulls ? '❌ Still has nulls' : '✅ All nulls removed'}`);
             
             // === BUILD FORM DATA ===
             const formData = new URLSearchParams();
@@ -1237,6 +1744,139 @@ class FacebookAPI {
     }
     
     /**
+     * Crawl Comments from a Facebook Post
+     * Fetches top-level comments to enable Reply Mode (Mode B)
+     * 
+     * @param {String} postId - The Facebook Post ID
+     * @param {String} cookie - Facebook session cookie
+     * @param {String} fb_dtsg - Facebook DTSG token for GraphQL validation
+     * @returns {Array<Object>} - Array of { id, authorName } objects
+     */
+    async crawlComments(postId, cookie, fb_dtsg) {
+        console.log(`\n🔍 [Crawl Comments] Fetching comments for post: ${postId}`);
+        
+        try {
+            // Generate feedback ID (Base64 encoded "feedback:{postId}")
+            const feedbackId = Buffer.from(`feedback:${postId}`).toString('base64');
+            console.log(`   📦 Feedback ID: ${feedbackId}`);
+            
+            // Use provided fb_dtsg or fall back to accessToken (which might contain dtsg)
+            const dtsg = fb_dtsg || this.accessToken || '';
+            if (!dtsg) {
+                console.log(`   ⚠️ [Crawl Comments] No fb_dtsg token provided, request may fail`);
+            }
+            
+            // Build GraphQL variables (matches browser capture)
+            const variables = {
+                commentsIntentToken: "RANKED_UNFILTERED_CHRONOLOGICAL_REPLIES_INTENT_V1",
+                feedLocation: "DEDICATED_COMMENTING_SURFACE",
+                feedbackSource: 110,
+                focusCommentID: null,
+                scale: 1,
+                useDefaultActor: false,
+                id: feedbackId,
+                __relay_internal__pv__CometUFICommentAvatarStickerAnimatedImagerelayprovider: true,
+                __relay_internal__pv__IsWorkUserrelayprovider: false
+            };
+            
+            // Clean null values
+            const cleanedVariables = this._cleanPayload(variables);
+            
+            // Extract user ID from cookie
+            const cookieToUse = cookie || this.cookie || '';
+            const userIdMatch = cookieToUse.match(/c_user=(\d+)/);
+            const userId = userIdMatch ? userIdMatch[1] : '';
+            
+            // Build form data
+            const formData = new URLSearchParams();
+            formData.append('av', userId);
+            formData.append('__user', userId);
+            formData.append('__a', '1');
+            formData.append('fb_dtsg', dtsg);
+            formData.append('fb_api_caller_class', 'RelayModern');
+            formData.append('fb_api_req_friendly_name', 'CometUFICommentsProviderPaginationQuery');
+            formData.append('doc_id', '25399415259725176'); // Comment fetch doc_id
+            formData.append('variables', JSON.stringify(cleanedVariables));
+            
+            console.log(`   📤 Requesting comments with doc_id: 25399415259725176`);
+            
+            // Make GraphQL request
+            const response = await fetch('https://www.facebook.com/api/graphql/', {
+                method: 'POST',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Origin': 'https://www.facebook.com',
+                    'Referer': `https://www.facebook.com/`,
+                    'Cookie': cookieToUse,
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin'
+                },
+                body: formData.toString()
+            });
+            
+            if (!response.ok) {
+                console.log(`   ❌ [Crawl Comments] HTTP Error: ${response.status}`);
+                return [];
+            }
+            
+            const responseText = await response.text();
+            
+            // Parse JSON response (may have multiple JSON objects)
+            let data;
+            try {
+                // Try parsing as single JSON first
+                data = JSON.parse(responseText);
+            } catch (e) {
+                // Facebook sometimes returns multiple JSON objects, take the first
+                const firstJson = responseText.split('\n')[0];
+                try {
+                    data = JSON.parse(firstJson);
+                } catch (e2) {
+                    console.log(`   ❌ [Crawl Comments] Failed to parse response`);
+                    return [];
+                }
+            }
+            
+            // Check for errors
+            if (data.errors || data.error) {
+                console.log(`   ❌ [Crawl Comments] GraphQL Error:`, data.errors || data.error);
+                return [];
+            }
+            
+            // Navigate to comments array (deep path)
+            // Path: data.node.comment_rendering_instance_for_feed_location.comments.edges
+            const edges = data?.data?.node?.comment_rendering_instance_for_feed_location?.comments?.edges;
+            
+            if (!edges || !Array.isArray(edges) || edges.length === 0) {
+                console.log(`   ⚠️ [Crawl Comments] No comments found on this post`);
+                console.log(`   📋 Response structure:`, Object.keys(data?.data?.node || {}));
+                return [];
+            }
+            
+            // Map edges to simplified comment objects
+            const comments = edges.map(edge => ({
+                id: edge.node?.id || null,                          // Comment ID (Base64 string)
+                authorName: edge.node?.author?.name || 'Unknown'    // Author's Name
+            })).filter(c => c.id); // Filter out any without valid ID
+            
+            console.log(`   ✅ [Crawl Comments] Found ${comments.length} comments`);
+            comments.slice(0, 5).forEach((c, i) => {
+                console.log(`      ${i + 1}. ${c.authorName} (ID: ${c.id.substring(0, 30)}...)`);
+            });
+            
+            return comments;
+            
+        } catch (error) {
+            console.error(`   ❌ [Crawl Comments] Error:`, error.message);
+            return [];
+        }
+    }
+
+    /**
      * Helper: Detect best header profile based on User-Agent
      * DEPRECATED: Now always returns 'desktop' since we use GraphQL exclusively
      * @private
@@ -1249,22 +1889,39 @@ class FacebookAPI {
 
 /**
  * Campaign Automation Service
+ * 
+ * STRICT WORKFLOW v4.0:
+ * - Step A: Determine Source (Priority: Targets > Random NewsFeed)
+ * - Step B: Pre-filter by DB (efficiency check before stats fetch)
+ * - Step C: Sequential "Focus" Processing (exhaust one post before moving to next)
  */
 class CampaignAutomationService {
     /**
      * Process một campaign active
+     * 
+     * STRICT SEQUENTIAL LOGIC ("Focus Loop"):
+     * - For each post: post ALL comments (up to maxCommentsPerPost) before moving on
+     * - Wait delay between each comment
+     * - Re-check campaign status before each action
+     * 
      * @param {Campaign} campaign
      */
     async processCampaign(campaign) {
+        console.log(`\n${'='.repeat(60)}`);
         console.log(`🚀 Processing campaign: ${campaign.name} (${campaign._id})`);
+        console.log(`${'='.repeat(60)}`);
         
         try {
+            // ============================================
+            // PHASE 1: Setup & Validation
+            // ============================================
+            
             // 1. Get Facebook account với token
             const fbAccount = await FacebookAccount.getWithToken(campaign.facebookAccountId);
             
             if (!fbAccount) {
                 console.log(`❌ Facebook account not found for campaign ${campaign._id}`);
-                await campaign.pauseCampaign('Không tìm thấy tài khoản Facebook');
+                await this._pauseCampaignWithLog(campaign._id, 'Không tìm thấy tài khoản Facebook');
                 return;
             }
             
@@ -1274,27 +1931,22 @@ class CampaignAutomationService {
             
             if (!fbAccount.isTokenValid()) {
                 console.log(`❌ Facebook token invalid for campaign ${campaign._id} (status: ${fbAccount.tokenStatus})`);
-                await campaign.pauseCampaign('Token Facebook không còn hoạt động');
+                await this._pauseCampaignWithLog(campaign._id, 'Token Facebook không còn hoạt động');
                 return;
             }
             
             // 2. Init Facebook API
             const fbAPI = new FacebookAPI(fbAccount.accessToken, fbAccount.cookie);
-            
-            // 3. Check account health (LIVE check for all modes)
-            console.log('🏥 Checking account health...');
-            
             const isCookieOnly = fbAccount.authMode === 'cookie_only' || fbAccount.tokenStatus === 'cookie_only';
             
-            // Perform comprehensive health check (works for both OAuth and Cookie-only)
+            // 3. Health check
+            console.log('\n🏥 Checking account health...');
             const healthResult = await fbAPI.checkAccountHealth({
-                userAgent: fbAccount.userAgent // Pass custom UA if stored
+                userAgent: fbAccount.userAgent
             });
             
             if (!healthResult.healthy) {
-                console.log(`❌ Facebook account UNHEALTHY for campaign ${campaign._id}`);
-                console.log('📋 Reason:', healthResult.reason);
-                console.log('📋 Details:', JSON.stringify(healthResult.details, null, 2));
+                console.log(`❌ Facebook account UNHEALTHY: ${healthResult.reason}`);
                 
                 // Update account status in DB
                 try {
@@ -1306,158 +1958,402 @@ class CampaignAutomationService {
                     };
                     fbAccount.lastCheckedAt = new Date();
                     await fbAccount.save();
-                    console.log('📋 Account status updated to invalid in database');
                 } catch (dbError) {
                     console.error('⚠️ Failed to update account status:', dbError.message);
                 }
                 
-                await campaign.pauseCampaign(`Cookie/Token không hợp lệ: ${healthResult.reason}`);
+                await this._pauseCampaignWithLog(campaign._id, `Cookie/Token không hợp lệ: ${healthResult.reason}`);
                 return;
             }
             
             console.log(`✅ Account healthy: ${healthResult.reason}`);
-            console.log('📋 Health check details:', JSON.stringify(healthResult.details, null, 2));
             
             // Update healthy status in DB
             try {
-                fbAccount.healthStatus = {
-                    isHealthy: true,
-                    lastError: null,
-                    lastErrorAt: null
-                };
+                fbAccount.healthStatus = { isHealthy: true, lastError: null, lastErrorAt: null };
                 fbAccount.lastCheckedAt = new Date();
                 await fbAccount.save();
-            } catch (e) {
-                // Non-critical, continue
-            }
+            } catch (e) { /* Non-critical */ }
             
-            // Log Desktop cookie confirmation (all crawling now uses GraphQL)
-            if (healthResult.details?.isDesktopCookie) {
-                console.log('✅ [Info] Desktop cookie confirmed - using GraphQL crawler (unified with extension)');
-            }
+            // ============================================
+            // PHASE 2: Get Target Posts (with pre-filtering)
+            // ============================================
             
-            // 4. Get target posts to comment
-            const targetPosts = await this.getTargetPosts(campaign);
-            
-            if (!targetPosts || targetPosts.length === 0) {
-                console.log(`⚠️ [Campaign] No target posts to comment for campaign ${campaign._id}`);
-                console.log(`📋 targetPostIds: ${campaign.targetPostIds?.length || 0}`);
-                console.log(`📋 linkGroups: ${campaign.linkGroups?.length || 0}`);
-                console.log(`📋 fanpages: ${campaign.fanpages?.length || 0}`);
+            // Re-fetch campaign from DB for latest targetedPosts data
+            const freshCampaign = await Campaign.findById(campaign._id);
+            if (!freshCampaign || freshCampaign.status !== 'active') {
+                console.log(`⏹️ Campaign no longer active, stopping.`);
                 return;
             }
             
-            console.log(`📝 Found ${targetPosts.length} posts to process`);
+            const targetPosts = await this.getTargetPosts(freshCampaign);
             
-            // 5. Process each post with LIVE status checking
-            let commentsPosted = 0;
-            const maxCommentsThisRun = 3; // Limit per run để tránh spam
+            if (!targetPosts || targetPosts.length === 0) {
+                console.log(`⚠️ [Campaign] No target posts available for campaign ${campaign._id}`);
+                return;
+            }
+            
+            console.log(`\n📝 [Phase 2] ${targetPosts.length} posts to process`);
+            
+            // ============================================
+            // PHASE 3: Sequential "Focus" Processing
+            // ============================================
+            
+            const maxCommentsPerPost = freshCampaign.maxCommentsPerPost || 1;
+            const minLikes = freshCampaign.filters?.minLikes || 0;
+            const minComments = freshCampaign.filters?.minComments || 0;
+            const minShares = freshCampaign.filters?.minShares || 0;
+            const delayMin = freshCampaign.delayMin || 30;
+            const delayMax = freshCampaign.delayMax || 60;
+            
+            let totalCommentsThisRun = 0;
+            const maxCommentsThisRun = 5; // Safety limit per scheduler run
+            
+            console.log(`\n${'─'.repeat(60)}`);
+            console.log(`📋 FOCUS LOOP STARTING`);
+            console.log(`   Max comments per post: ${maxCommentsPerPost}`);
+            console.log(`   Filters: Likes>=${minLikes}, Comments>=${minComments}, Shares>=${minShares}`);
+            console.log(`   Delay: ${delayMin}-${delayMax}s`);
+            console.log(`${'─'.repeat(60)}`);
             
             for (const targetPost of targetPosts) {
-                // === CRITICAL: RE-FETCH CAMPAIGN STATUS BEFORE EACH ACTION ===
-                // This ensures immediate stop when user clicks "Stop" in UI
-                const currentCampaign = await Campaign.findById(campaign._id).select('status');
-                
-                if (!currentCampaign || currentCampaign.status !== 'active') {
-                    console.log(`\n⏹️  [CAMPAIGN STOPPED] Campaign ${campaign._id} was stopped/paused by user.`);
-                    console.log(`   Current status: ${currentCampaign?.status || 'not found'}`);
-                    console.log(`   Terminating processing loop immediately.`);
+                // ============================================
+                // SAFETY CHECK: Campaign status before each post
+                // ============================================
+                const currentStatus = await Campaign.findById(campaign._id).select('status');
+                if (!currentStatus || currentStatus.status !== 'active') {
+                    console.log(`\n⏹️ [STOPPED] Campaign no longer active. Status: ${currentStatus?.status || 'not found'}`);
                     break;
                 }
                 
-                const { postId, postUrl, groupId } = targetPost; // Destructure post object with groupId
-                
-                if (commentsPosted >= maxCommentsThisRun) {
-                    console.log(`⏸️ Reached max comments limit (${maxCommentsThisRun}) for this run`);
+                // Global run limit check
+                if (totalCommentsThisRun >= maxCommentsThisRun) {
+                    console.log(`\n⏸️ Reached max comments limit (${maxCommentsThisRun}) for this scheduler run`);
                     break;
                 }
                 
-                // Check if already commented on this post
-                if (!campaign.canCommentOnPost(postId)) {
-                    console.log(`⏭️ Post ${postId} đã đủ số lượng comment`);
+                const { postId, postUrl, groupId } = targetPost;
+                console.log(`\n${'─'.repeat(40)}`);
+                console.log(`🎯 FOCUSING ON POST: ${postId}`);
+                console.log(`   URL: ${postUrl || 'N/A'}`);
+                console.log(`   Group: ${groupId || 'Not a group post'}`);
+                
+                // ============================================
+                // STEP 1: Re-check DB for current comment count
+                // ============================================
+                const latestCampaign = await Campaign.findById(campaign._id);
+                const targetedPostEntry = latestCampaign?.targetedPosts?.find(p => p.postId === postId);
+                let commentsSentToPost = targetedPostEntry?.commentsSent || 0;
+                
+                if (commentsSentToPost >= maxCommentsPerPost) {
+                    console.log(`   ⏭️ [DB Check] Already sent ${commentsSentToPost}/${maxCommentsPerPost} comments, skipping`);
                     continue;
                 }
                 
-                // Generate comment content
-                const commentData = campaign.generateComment();
-                if (!commentData) {
-                    console.log(`❌ Failed to generate comment for campaign ${campaign._id}`);
+                // ============================================
+                // STEP 2: Fetch stats and validate filters
+                // ============================================
+                console.log(`   📊 Fetching post stats...`);
+                let postStats = { likes: 0, comments: 0, shares: 0 };
+                
+                try {
+                    if (isCookieOnly) {
+                        postStats = await fbAPI.getPostStatsWithCookie(postId, fbAccount.fb_dtsg, postUrl);
+                    } else {
+                        postStats = await fbAPI.getPostStats(postId);
+                    }
+                    console.log(`   📈 Stats: Likes=${postStats.likes}, Comments=${postStats.comments}, Shares=${postStats.shares}`);
+                } catch (statsError) {
+                    console.log(`   ⚠️ Could not fetch stats: ${statsError.message}`);
+                }
+                
+                // Validate against filters
+                if (postStats.likes < minLikes) {
+                    console.log(`   ⏭️ [Filter] Not enough likes (${postStats.likes} < ${minLikes})`);
+                    continue;
+                }
+                if (postStats.comments < minComments) {
+                    console.log(`   ⏭️ [Filter] Not enough comments (${postStats.comments} < ${minComments})`);
+                    continue;
+                }
+                if (postStats.shares < minShares) {
+                    console.log(`   ⏭️ [Filter] Not enough shares (${postStats.shares} < ${minShares})`);
                     continue;
                 }
                 
-                console.log(`💬 Commenting on post ${postId}:`);
-                console.log(`   📝 Text: ${commentData.text.substring(0, 50)}...`);
-                console.log(`   🔗 Link: ${commentData.fullUrl}`);
-                console.log(`   🌐 Post URL: ${postUrl || 'N/A'}`);
-                console.log(`   👥 Group ID: ${groupId || 'null (not a group post)'}`);
+                console.log(`   ✅ Post passed all filters!`);
                 
-                // Post comment (cookie or OAuth based on auth mode)
-                let result;
-                if (isCookieOnly) {
-                    // Pass groupId explicitly (PREFERRED) and postUrl as fallback
-                    result = await fbAPI.postCommentWithCookie(postId, commentData.text, fbAccount.fb_dtsg, {
-                        groupId: groupId,      // EXPLICIT: From crawler data
-                        postUrl: postUrl       // FALLBACK: For URL-based extraction
-                    });
-                } else {
+                // ============================================
+                // STEP 3: FOCUS LOOP - Post ALL comments to this post
+                // ============================================
+                const remainingComments = maxCommentsPerPost - commentsSentToPost;
+                console.log(`\n   🔄 FOCUS LOOP: Need to post ${remainingComments} more comment(s)`);
+                
+                for (let i = 0; i < remainingComments; i++) {
+                    // Safety checks before each comment
+                    const statusCheck = await Campaign.findById(campaign._id).select('status');
+                    if (!statusCheck || statusCheck.status !== 'active') {
+                        console.log(`   ⏹️ Campaign stopped during focus loop`);
+                        break;
+                    }
+                    
+                    if (totalCommentsThisRun >= maxCommentsThisRun) {
+                        console.log(`   ⏸️ Run limit reached during focus loop`);
+                        break;
+                    }
+                    
+                    console.log(`\n   📝 Comment ${i + 1}/${remainingComments} for post ${postId}:`);
+                    
+                    // Generate comment
+                    const commentData = latestCampaign.generateComment();
+                    if (!commentData) {
+                        console.log(`   ❌ Failed to generate comment`);
+                        continue;
+                    }
+                    
+                    // Attempt Reply Mode (Mode B)
+                    let targetCommentId = null;
+                    let replyName = 'bạn';
+                    let commentMode = 'A';
+                    
                     try {
-                        const comment = await fbAPI.postComment(postId, commentData.text);
-                        result = { success: true, id: comment.id, message: commentData.text };
-                    } catch (error) {
-                        result = { success: false, error: error.message };
+                        console.log(`   🔄 Attempting Reply Mode (crawling comments)...`);
+                        const existingComments = await fbAPI.crawlComments(postId, fbAccount.cookie, fbAccount.fb_dtsg);
+                        
+                        if (existingComments && existingComments.length > 0) {
+                            const randomIndex = Math.floor(Math.random() * existingComments.length);
+                            const targetComment = existingComments[randomIndex];
+                            targetCommentId = targetComment.id;
+                            replyName = targetComment.authorName || 'bạn';
+                            commentMode = 'B';
+                            console.log(`   ✅ Reply Mode: Will reply to ${replyName}`);
+                        } else {
+                            console.log(`   ⚠️ No comments found, using Direct Mode (A)`);
+                        }
+                    } catch (crawlError) {
+                        console.log(`   ⚠️ Comment crawl failed, using Direct Mode (A)`);
+                    }
+                    
+                    // Substitute {name} placeholder
+                    let finalMessage = commentData.text;
+                    if (finalMessage.includes('{name}')) {
+                        finalMessage = finalMessage.replace(/\{name\}/g, replyName);
+                    }
+                    
+                    console.log(`   💬 Mode: ${commentMode} | Message: ${finalMessage.substring(0, 50)}...`);
+                    
+                    // Post comment
+                    let result;
+                    if (isCookieOnly) {
+                        result = await fbAPI.postCommentWithCookie(postId, finalMessage, fbAccount.fb_dtsg, {
+                            groupId,
+                            postUrl,
+                            parentCommentId: targetCommentId,
+                            targetName: replyName
+                        });
+                    } else {
+                        try {
+                            const comment = await fbAPI.postComment(postId, commentData.text);
+                            result = { success: true, id: comment.id, message: commentData.text };
+                        } catch (error) {
+                            result = { success: false, error: error.message };
+                        }
+                    }
+                    
+                    // Update DB based on result
+                    if (result.success) {
+                        console.log(`   ✅ Comment posted successfully: ${result.id}`);
+                        totalCommentsThisRun++;
+                        commentsSentToPost++;
+                        
+                        const logMessage = commentMode === 'B' 
+                            ? `Reply thành công cho ${replyName} trong bài viết ${postId}`
+                            : `Comment thành công vào bài viết ${postId}`;
+                        
+                        // Ensure targetedPosts entry exists
+                        await Campaign.updateOne(
+                            { _id: campaign._id, 'targetedPosts.postId': { $ne: postId } },
+                            {
+                                $push: {
+                                    targetedPosts: {
+                                        postId,
+                                        postUrl,
+                                        commentsSent: 0,
+                                        isBlocked: false,
+                                        stats: postStats,
+                                        firstCommentedAt: new Date()
+                                    }
+                                }
+                            }
+                        );
+                        
+                        // Update stats
+                        await Campaign.updateOne(
+                            { _id: campaign._id },
+                            {
+                                $inc: { 
+                                    'stats.totalCommentsSent': 1,
+                                    'stats.successfulComments': 1,
+                                    'targetedPosts.$[post].commentsSent': 1
+                                },
+                                $push: {
+                                    activityLogs: {
+                                        action: commentMode === 'B' ? 'reply_sent' : 'comment_sent',
+                                        message: logMessage,
+                                        postId,
+                                        commentId: result.id,
+                                        timestamp: new Date(),
+                                        metadata: commentMode === 'B' ? { 
+                                            mode: 'B', 
+                                            replyTo: replyName, 
+                                            parentCommentId: targetCommentId 
+                                        } : { mode: 'A' }
+                                    }
+                                },
+                                $set: {
+                                    'targetedPosts.$[post].lastCommentedAt': new Date(),
+                                    updatedAt: new Date()
+                                }
+                            },
+                            {
+                                arrayFilters: [{ 'post.postId': postId }]
+                            }
+                        );
+                        
+                        console.log(`   📊 Updated: Post now has ${commentsSentToPost}/${maxCommentsPerPost} comments`);
+                    } else {
+                        console.log(`   ❌ Comment failed: ${result.error}`);
+                        
+                        await Campaign.updateOne(
+                            { _id: campaign._id },
+                            {
+                                $inc: { 
+                                    'stats.totalCommentsSent': 1,
+                                    'stats.failedComments': 1
+                                },
+                                $push: {
+                                    activityLogs: {
+                                        action: 'comment_failed',
+                                        message: `Comment thất bại: ${result.error}`,
+                                        postId,
+                                        timestamp: new Date(),
+                                        metadata: { reason: result.error }
+                                    }
+                                },
+                                $set: { updatedAt: new Date() }
+                            }
+                        );
+                        
+                        // If blocked, skip remaining comments for this post
+                        if (result.error?.toLowerCase().includes('block') || 
+                            result.error?.toLowerCase().includes('spam')) {
+                            console.log(`   🚫 Possible block detected, skipping remaining comments for this post`);
+                            break;
+                        }
+                    }
+                    
+                    // Wait between comments (within same post)
+                    if (i < remainingComments - 1) {
+                        const delay = Math.floor(Math.random() * (delayMax - delayMin + 1)) + delayMin;
+                        console.log(`   ⏳ Waiting ${delay}s before next comment...`);
+                        await this.sleep(delay * 1000);
                     }
                 }
                 
-                if (result.success) {
-                    console.log(`✅ Comment posted successfully: ${result.id}`);
-                    await campaign.recordSuccessfulComment(postId, result.id);
-                    commentsPosted++;
-                    
-                    // Update stats
-                    campaign.stats.totalCommentsSent = (campaign.stats.totalCommentsSent || 0) + 1;
-                    campaign.stats.successfulComments = (campaign.stats.successfulComments || 0) + 1;
-                    await campaign.save();
-                } else {
-                    console.error(`❌ Comment failed: ${result.error}`);
-                    await campaign.recordFailedComment(postId, result.error);
-                    
-                    // Update stats
-                    campaign.stats.failedComments = (campaign.stats.failedComments || 0) + 1;
-                    await campaign.save();
-                }
+                console.log(`   ✅ Finished focusing on post ${postId} (${commentsSentToPost}/${maxCommentsPerPost} comments sent)`);
                 
-                // Delay between comments (random delay)
-                const delay = Math.floor(Math.random() * (campaign.delayMax - campaign.delayMin + 1)) + campaign.delayMin;
-                console.log(`⏳ Waiting ${delay} seconds before next comment...`);
-                await this.sleep(delay * 1000);
+                // Wait before moving to next post
+                const interPostDelay = Math.floor(Math.random() * (delayMax - delayMin + 1)) + delayMin;
+                console.log(`   ⏳ Waiting ${interPostDelay}s before next post...`);
+                await this.sleep(interPostDelay * 1000);
             }
             
-            console.log(`✅ Campaign ${campaign.name} processed - ${commentsPosted} comments posted this run`);
+            console.log(`\n${'='.repeat(60)}`);
+            console.log(`✅ Campaign run complete: ${totalCommentsThisRun} comments posted`);
+            console.log(`${'='.repeat(60)}\n`);
             
         } catch (error) {
             console.error(`❌ Process campaign ${campaign._id} error:`, error);
-            await campaign.recordFailedComment('N/A', error.message);
+            
+            await Campaign.updateOne(
+                { _id: campaign._id },
+                {
+                    $push: {
+                        activityLogs: {
+                            action: 'comment_failed',
+                            message: `Campaign error: ${error.message}`,
+                            postId: 'N/A',
+                            timestamp: new Date(),
+                            metadata: { reason: error.message, stack: error.stack }
+                        }
+                    },
+                    $set: { updatedAt: new Date() }
+                }
+            );
         }
     }
     
     /**
+     * Helper: Pause campaign with activity log
+     * @private
+     */
+    async _pauseCampaignWithLog(campaignId, reason) {
+        await Campaign.updateOne(
+            { _id: campaignId },
+            {
+                $set: { status: 'paused', updatedAt: new Date() },
+                $push: {
+                    activityLogs: {
+                        action: 'paused',
+                        message: `Chiến dịch tạm dừng: ${reason}`,
+                        timestamp: new Date(),
+                        metadata: { reason }
+                    }
+                }
+            }
+        );
+    }
+    
+    /**
      * Get target posts for a campaign
+     * STRICT PRIORITY LOGIC:
+     * - IF any targetPostIds, linkGroups, or fanpages are specified → ONLY use those (no NewsFeed)
+     * - ELSE → Crawl from Random NewsFeed
+     * 
+     * EFFICIENCY: Check DB for already-commented posts BEFORE fetching stats
+     * 
      * @param {Campaign} campaign
-     * @returns {Array<Object>} - Array of { postId, postUrl } objects
+     * @returns {Array<Object>} - Array of { postId, postUrl, groupId } objects
      */
     async getTargetPosts(campaign) {
-        const posts = []; // Changed from postIds array to posts array with objects
+        const posts = [];
         
         // Get FB account for cookie
         const fbAccount = await FacebookAccount.getWithToken(campaign.facebookAccountId);
         const cookie = fbAccount?.cookie || '';
         
-        // 1. From targetPostIds (direct input by user)
-        if (campaign.targetPostIds && campaign.targetPostIds.length > 0) {
-            console.log(`📋 Processing ${campaign.targetPostIds.length} target post inputs...`);
+        // ============================================
+        // STEP A: Determine Source (STRICT PRIORITY)
+        // ============================================
+        const hasTargetPostIds = campaign.targetPostIds && campaign.targetPostIds.length > 0;
+        const hasLinkGroups = campaign.linkGroups && campaign.linkGroups.length > 0;
+        const hasFanpages = campaign.fanpages && campaign.fanpages.length > 0;
+        const hasSpecificTargets = hasTargetPostIds || hasLinkGroups || hasFanpages;
+        
+        console.log(`\n📋 [GetTargetPosts] Source Analysis:`);
+        console.log(`   📌 targetPostIds: ${campaign.targetPostIds?.length || 0}`);
+        console.log(`   👥 linkGroups: ${campaign.linkGroups?.length || 0}`);
+        console.log(`   📄 fanpages: ${campaign.fanpages?.length || 0}`);
+        console.log(`   🎯 Mode: ${hasSpecificTargets ? 'TARGETED (no NewsFeed)' : 'AUTO (NewsFeed crawl)'}`);
+        
+        // ============================================
+        // PRIORITY SOURCE 1: Target Post IDs (direct input by user)
+        // ============================================
+        if (hasTargetPostIds) {
+            console.log(`\n📋 Processing ${campaign.targetPostIds.length} target post inputs...`);
             for (const input of campaign.targetPostIds) {
                 let postId = null;
-                let resolvedUrl = input; // Default to original input
+                let resolvedUrl = input;
                 
                 // Try sync extraction first
                 postId = extractPostIdSync(input);
@@ -1472,43 +2368,36 @@ class CampaignAutomationService {
                 }
                 
                 if (postId && postId !== 'NEEDS_ASYNC_RESOLVE') {
-                    // Extract groupId from URL and include in post object
                     const groupId = this._extractGroupId(resolvedUrl) || null;
                     posts.push({ postId, postUrl: resolvedUrl, groupId });
-                    console.log(`   ✅ Post ID: ${postId} (from: ${input.substring(0, 50)}...)`);
-                    
-                    if (groupId) {
-                        console.log(`   👥 Group Post Detected - Group ID: ${groupId}`);
-                    }
+                    console.log(`   ✅ Post ID: ${postId}${groupId ? ` (Group: ${groupId})` : ''}`);
                 } else {
                     console.error(`   ❌ Invalid post URL/ID: ${input}`);
-                    console.error(`   ℹ️  Please use numeric post ID or classic Facebook URL`);
                 }
             }
-            console.log(`📊 Valid posts: ${posts.length}/${campaign.targetPostIds.length}`);
+            console.log(`📊 Valid target posts: ${posts.length}/${campaign.targetPostIds.length}`);
         }
         
-        // 2. Crawl from linkGroups (Facebook Groups)
-        if (campaign.linkGroups && campaign.linkGroups.length > 0) {
-            console.log(`📋 Crawling ${campaign.linkGroups.length} Facebook groups...`);
+        // ============================================
+        // PRIORITY SOURCE 2: Link Groups (Facebook Groups)
+        // ============================================
+        if (hasLinkGroups) {
+            console.log(`\n📋 Crawling ${campaign.linkGroups.length} Facebook groups...`);
             if (fbAccount && fbAccount.cookie) {
                 for (const groupUrl of campaign.linkGroups) {
                     try {
                         const groupPosts = await this.crawlGroupPosts(groupUrl, fbAccount.cookie);
-                        // Extract group ID from the group URL
                         const groupId = this._extractGroupId(groupUrl) || null;
-                        // Convert to objects with postUrl and groupId
+                        
                         for (const crawledPost of groupPosts) {
-                            // crawledPost can be string (postId) or object { postId, groupId }
                             const postId = typeof crawledPost === 'string' ? crawledPost : crawledPost.postId;
                             const postGroupId = typeof crawledPost === 'object' ? (crawledPost.groupId || groupId) : groupId;
-                            // Construct group post URL
                             const postUrl = postGroupId 
                                 ? `https://www.facebook.com/groups/${postGroupId}/posts/${postId}/`
                                 : null;
                             posts.push({ postId, postUrl, groupId: postGroupId });
                         }
-                        console.log(`   ✅ Found ${groupPosts.length} posts from group (Group ID: ${groupId || 'unknown'})`);
+                        console.log(`   ✅ Found ${groupPosts.length} posts from group (ID: ${groupId || 'unknown'})`);
                     } catch (error) {
                         console.error(`   ❌ Failed to crawl group: ${groupUrl}`, error.message);
                     }
@@ -1516,17 +2405,18 @@ class CampaignAutomationService {
             }
         }
         
-        // 3. Crawl from fanpages
-        if (campaign.fanpages && campaign.fanpages.length > 0) {
-            console.log(`📋 Crawling ${campaign.fanpages.length} fanpages...`);
+        // ============================================
+        // PRIORITY SOURCE 3: Fanpages
+        // ============================================
+        if (hasFanpages) {
+            console.log(`\n📋 Crawling ${campaign.fanpages.length} fanpages...`);
             if (fbAccount && fbAccount.cookie) {
                 for (const pageUrl of campaign.fanpages) {
                     try {
                         const pagePosts = await this.crawlPagePosts(pageUrl, fbAccount.cookie);
-                        // Fanpage posts don't have group ID
                         for (const crawledPost of pagePosts) {
                             const postId = typeof crawledPost === 'string' ? crawledPost : crawledPost.postId;
-                            posts.push({ postId, postUrl: null, groupId: null }); // Explicitly null
+                            posts.push({ postId, postUrl: null, groupId: null });
                         }
                         console.log(`   ✅ Found ${pagePosts.length} posts from fanpage`);
                     } catch (error) {
@@ -1536,19 +2426,18 @@ class CampaignAutomationService {
             }
         }
         
-        // 4. If no specific targets, crawl from News Feed (auto mode)
-        if (posts.length === 0) {
-            console.log(`📋 No specific targets, crawling News Feed (auto mode)...`);
+        // ============================================
+        // FALLBACK SOURCE: NewsFeed (ONLY if no specific targets)
+        // ============================================
+        if (!hasSpecificTargets && posts.length === 0) {
+            console.log(`\n📋 No specific targets, crawling News Feed (auto mode)...`);
             if (fbAccount && fbAccount.cookie) {
                 try {
                     const feedPosts = await this.crawlNewsFeed(fbAccount.cookie, 10);
-                    // News Feed posts can contain group posts - handle both formats
                     for (const crawledPost of feedPosts) {
                         if (typeof crawledPost === 'string') {
-                            // Legacy format: just postId
                             posts.push({ postId: crawledPost, postUrl: null, groupId: null });
                         } else {
-                            // New format: { postId, groupId, url }
                             const postUrl = crawledPost.groupId 
                                 ? `https://www.facebook.com/groups/${crawledPost.groupId}/posts/${crawledPost.postId}/`
                                 : crawledPost.url || null;
@@ -1566,16 +2455,39 @@ class CampaignAutomationService {
             }
         }
         
+        // ============================================
+        // STEP B: Pre-filter by DB (Efficiency check)
+        // Remove posts that already reached maxCommentsPerPost BEFORE returning
+        // ============================================
+        const maxCommentsAllowed = campaign.maxCommentsPerPost || 1;
+        const filteredPosts = [];
+        
+        for (const post of posts) {
+            const targetedPostEntry = campaign.targetedPosts?.find(p => p.postId === post.postId);
+            const commentsSent = targetedPostEntry?.commentsSent || 0;
+            
+            if (commentsSent >= maxCommentsAllowed) {
+                console.log(`   ⏭️ [Pre-filter] Skip ${post.postId}: Already sent ${commentsSent}/${maxCommentsAllowed} comments`);
+                continue;
+            }
+            
+            filteredPosts.push(post);
+        }
+        
         // Remove duplicates based on postId
         const uniquePosts = [];
         const seenPostIds = new Set();
-        for (const post of posts) {
+        for (const post of filteredPosts) {
             if (!seenPostIds.has(post.postId)) {
                 seenPostIds.add(post.postId);
                 uniquePosts.push(post);
             }
         }
-        console.log(`📊 Total unique posts: ${uniquePosts.length}`);
+        
+        console.log(`\n📊 [GetTargetPosts] Summary:`);
+        console.log(`   📥 Raw posts collected: ${posts.length}`);
+        console.log(`   🔍 After pre-filter: ${filteredPosts.length}`);
+        console.log(`   ✅ Unique posts to process: ${uniquePosts.length}`);
         
         return uniquePosts;
     }
@@ -2558,8 +3470,33 @@ class CampaignAutomationService {
                 stats: postStats
             });
             
-            // 7. Record successful comment
-            await campaign.recordSuccessfulComment(postId, comment.id);
+            // 7. Record successful comment with atomic update
+            await Campaign.updateOne(
+                { _id: campaign._id },
+                {
+                    $inc: { 
+                        'stats.totalCommentsSent': 1,
+                        'stats.successfulComments': 1
+                    },
+                    $push: {
+                        activityLogs: {
+                            action: 'comment_sent',
+                            message: `Comment thành công vào bài viết ${postId}`,
+                            postId,
+                            commentId: comment.id,
+                            timestamp: new Date()
+                        }
+                    },
+                    $set: {
+                        'targetedPosts.$[post].commentsSent': 1,
+                        'targetedPosts.$[post].lastCommentedAt': new Date(),
+                        updatedAt: new Date()
+                    }
+                },
+                {
+                    arrayFilters: [{ 'post.postId': postId }]
+                }
+            );
             
             // 8. SAFETY CHECK: Verify comment sau 5 giây
             await this.safetyCheckComment(campaign, postId, comment.id, fbAPI);
@@ -2568,7 +3505,26 @@ class CampaignAutomationService {
             
         } catch (error) {
             console.error(`❌ Comment on post ${postId} error:`, error);
-            await campaign.recordFailedComment(postId, error.message);
+            
+            // ATOMIC UPDATE: Record failed comment
+            await Campaign.updateOne(
+                { _id: campaign._id },
+                {
+                    $inc: { 
+                        'stats.totalCommentsSent': 1,
+                        'stats.failedComments': 1
+                    },
+                    $push: {
+                        activityLogs: {
+                            action: 'comment_failed',
+                            message: `Comment thất bại: ${error.message}`,
+                            postId,
+                            timestamp: new Date(),
+                            metadata: { reason: error.message }
+                        }
+                    }
+                }
+            );
             return false;
         }
     }

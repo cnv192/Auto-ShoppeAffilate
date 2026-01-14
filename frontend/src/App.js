@@ -5,7 +5,13 @@ import { ConfigProvider, theme, App as AntApp } from 'antd';
 // Components
 import Login from './components/Login';
 import Homepage from './components/Homepage';
-import AdminDashboard from './components/AdminDashboard';
+import AdminLayout from './components/AdminLayout';
+import Dashboard from './components/Dashboard';
+import LinksPage from './components/LinksPage';
+import CampaignList from './components/CampaignList';
+import FacebookAccountManager from './components/FacebookAccountManager';
+import UserManagement from './components/UserManagement';
+import UserProfile from './components/UserProfile';
 import ExtensionAuthPage from './pages/ExtensionAuthPage';
 import authService from './services/authService';
 
@@ -36,12 +42,13 @@ const ProtectedRoute = ({ children }) => {
 
 /**
  * Main App Component với React Router
+ * Sử dụng nested routes để sidebar chỉ render 1 lần
  */
 function App() {
     const navigate = useNavigate();
     
     const handleLoginSuccess = (userData) => {
-        navigate('/admin');
+        navigate('/admin/dashboard');
     };
     
     return (
@@ -55,12 +62,25 @@ function App() {
                     {/* Extension Auth route - Public để extension có thể access */}
                     <Route path="/ext-auth" element={<ExtensionAuthPage />} />
                     
-                    {/* Protected admin route */}
+                    {/* Protected admin routes với nested layout */}
                     <Route 
                         path="/admin/*" 
                         element={
                             <ProtectedRoute>
-                                <AdminDashboard />
+                                <AdminLayout>
+                                    <Routes>
+                                        <Route path="dashboard" element={<Dashboard />} />
+                                        <Route path="links" element={<LinksPage />} />
+                                        <Route path="campaigns" element={<CampaignList />} />
+                                        <Route path="facebook" element={<FacebookAccountManager />} />
+                                        <Route path="profile" element={<UserProfile />} />
+                                        {authService.isAdmin() && (
+                                            <Route path="users" element={<UserManagement />} />
+                                        )}
+                                        <Route path="" element={<Navigate to="/admin/dashboard" replace />} />
+                                        <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+                                    </Routes>
+                                </AdminLayout>
                             </ProtectedRoute>
                         } 
                     />

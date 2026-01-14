@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Typography, Row, Col, Card, Tag, Spin, message } from 'antd';
-import { FireOutlined, ClockCircleOutlined, EyeOutlined } from '@ant-design/icons';
+import { Typography, Row, Col, Card, Tag, Spin, message, Empty, Button } from 'antd';
+import { FireOutlined, ClockCircleOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/vi';
+import { getApiUrl } from '../config/api';
 
 dayjs.extend(relativeTime);
 dayjs.locale('vi');
@@ -19,6 +20,7 @@ const { Title, Text, Paragraph } = Typography;
 const Homepage = () => {
     const [links, setLinks] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [hotLinks, setHotLinks] = useState([]);
     
     useEffect(() => {
@@ -27,10 +29,24 @@ const Homepage = () => {
     
     const fetchLinks = async () => {
         try {
-            const response = await axios.get('http://localhost:3001/api/links');
-            const allLinks = response.data.data || [];
+            setLoading(true);
+            setError(null);
             
-            // Sort by publishedAt or createdAt
+            // Use centralized config
+            const response = await axios.get(getApiUrl('links'));
+            
+            // Ensure response has data
+            if (!response.data) {
+                throw new Error('Invalid response from server');
+            }
+            
+            const allLinks = response.data.data || response.data || [];
+            
+            if (!Array.isArray(allLinks)) {
+                throw new Error('Invalid data format');
+            }
+            
+            // Sort by publishedAt or createdAt (from database)
             const sorted = allLinks.sort((a, b) => {
                 const dateA = new Date(a.publishedAt || a.createdAt);
                 const dateB = new Date(b.publishedAt || b.createdAt);
@@ -39,14 +55,18 @@ const Homepage = () => {
             
             setLinks(sorted);
             
-            // Hot links = top 5 by clicks
+            // Hot links = top 5 by clicks (from database)
             const hot = [...allLinks]
-                .sort((a, b) => (b.clickCount || 0) - (a.clickCount || 0))
+                .sort((a, b) => (b.clicks || b.clickCount || 0) - (a.clicks || a.clickCount || 0))
                 .slice(0, 5);
             setHotLinks(hot);
             
         } catch (error) {
-            message.error('Không thể tải bài viết');
+            console.error('Homepage fetch error:', error);
+            setError(error.message || 'Không thể tải bài viết');
+            message.error(error.message || 'Không thể tải bài viết');
+            setLinks([]);
+            setHotLinks([]);
         } finally {
             setLoading(false);
         }
@@ -68,6 +88,24 @@ const Homepage = () => {
         return (
             <div style={{ textAlign: 'center', padding: '100px 0' }}>
                 <Spin size="large" />
+                <div style={{ marginTop: 16, color: '#999' }}>Đang tải bài viết...</div>
+            </div>
+        );
+    }
+
+    if (error && links.length === 0) {
+        return (
+            <div style={{ textAlign: 'center', padding: '100px 0' }}>
+                <div style={{ color: '#ff4d4f', marginBottom: 16, fontSize: 16 }}>❌ {error}</div>
+                <Button icon={<ReloadOutlined />} onClick={fetchLinks}>Thử lại</Button>
+            </div>
+        );
+    }
+
+    if (links.length === 0) {
+        return (
+            <div style={{ textAlign: 'center', padding: '100px 0' }}>
+                <Empty description="Chưa có bài viết nào" />
             </div>
         );
     }
@@ -219,7 +257,7 @@ const Homepage = () => {
                                                 {link.title}
                                             </Text>
                                             <Text type="secondary" style={{ fontSize: 12 }}>
-                                                <EyeOutlined /> {link.clickCount || 0} lượt xem
+                                                <EyeOutlined /> {link.clicks || link.clickCount || 0} lượt xem
                                             </Text>
                                         </div>
                                     </div>

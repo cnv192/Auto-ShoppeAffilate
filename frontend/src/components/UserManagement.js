@@ -44,6 +44,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/vi';
 import authService from '../services/authService';
+import { getApiUrl } from '../config/api';
 
 dayjs.extend(relativeTime);
 dayjs.locale('vi');
@@ -51,12 +52,10 @@ dayjs.locale('vi');
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-
 const userApi = {
     getAll: async () => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/auth/users`, {
+        const res = await fetch(getApiUrl('auth/users'), {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('Failed to fetch users');
@@ -64,7 +63,7 @@ const userApi = {
     },
     create: async (data) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/auth/users`, {
+        const res = await fetch(getApiUrl('auth/users'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -80,7 +79,7 @@ const userApi = {
     },
     update: async (id, data) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/auth/users/${id}`, {
+        const res = await fetch(getApiUrl(`auth/users/${id}`), {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -96,7 +95,7 @@ const userApi = {
     },
     delete: async (id) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/auth/users/${id}`, {
+        const res = await fetch(getApiUrl(`auth/users/${id}`), {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
         });

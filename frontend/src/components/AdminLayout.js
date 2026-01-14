@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo, memo } from 'react';
 import { Layout, Menu, Avatar, Dropdown, Typography } from 'antd';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
     DashboardOutlined,
     LinkOutlined,
@@ -16,15 +17,29 @@ const { Text } = Typography;
 
 /**
  * Admin Layout - Layout cho admin dashboard
- * Có sidebar navigation
+ * Sidebar chỉ render 1 lần, sử dụng React Router để navigation
  */
 
-const AdminLayout = ({ children, currentPage = 'dashboard', onMenuClick }) => {
+const AdminLayout = ({ children }) => {
+    const navigate = useNavigate();
+    const location = useLocation();
     const user = authService.getCurrentUser();
+    
+    // Xác định current page từ URL
+    const currentPage = useMemo(() => {
+        const path = location.pathname;
+        if (path.includes('/admin/dashboard')) return 'dashboard';
+        if (path.includes('/admin/links')) return 'links';
+        if (path.includes('/admin/campaigns')) return 'campaigns';
+        if (path.includes('/admin/facebook')) return 'facebook';
+        if (path.includes('/admin/users')) return 'users';
+        if (path.includes('/admin/profile')) return 'profile';
+        return 'dashboard';
+    }, [location.pathname]);
     
     const handleLogout = () => {
         authService.logout();
-        window.location.href = '/';
+        navigate('/');
     };
     
     const userMenuItems = [
@@ -52,47 +67,57 @@ const AdminLayout = ({ children, currentPage = 'dashboard', onMenuClick }) => {
         if (key === 'logout') {
             handleLogout();
         } else if (key === 'profile') {
-            onMenuClick && onMenuClick('profile');
+            navigate('/admin/profile');
         }
     };
     
-    const menuItems = [
-        {
-            key: 'dashboard',
-            icon: <DashboardOutlined />,
-            label: 'Dashboard'
-        },
-        {
-            key: 'links',
-            icon: <LinkOutlined />,
-            label: 'Quản lý Links'
-        },
-        {
-            key: 'campaigns',
-            icon: <ThunderboltOutlined />,
-            label: 'Chiến dịch'
-        },
-        {
-            key: 'facebook',
-            icon: <FacebookOutlined />,
-            label: 'Tài khoản Facebook'
+    const menuItems = useMemo(() => {
+        const items = [
+            {
+                key: 'dashboard',
+                icon: <DashboardOutlined />,
+                label: 'Dashboard'
+            },
+            {
+                key: 'links',
+                icon: <LinkOutlined />,
+                label: 'Quản lý Links'
+            },
+            {
+                key: 'campaigns',
+                icon: <ThunderboltOutlined />,
+                label: 'Chiến dịch'
+            },
+            {
+                key: 'facebook',
+                icon: <FacebookOutlined />,
+                label: 'Tài khoản Facebook'
+            }
+        ];
+        
+        // Admin thấy thêm user management
+        if (user && user.role === 'admin') {
+            items.push({
+                key: 'users',
+                icon: <UserOutlined />,
+                label: 'Quản lý User'
+            });
         }
-    ];
+        
+        return items;
+    }, [user]);
     
-    // Admin thấy thêm user management
-    if (user && user.role === 'admin') {
-        menuItems.push({
-            key: 'users',
-            icon: <UserOutlined />,
-            label: 'Quản lý User'
-        });
-    }
+    const handleMenuClick = ({ key }) => {
+        navigate(`/admin/${key}`);
+    };
     
     return (
-        <Layout style={{ minHeight: '100vh', background: '#fff' }}>
+        <Layout style={{ minHeight: '100vh', background: '#f5f7fa' }}>
+            {/* Fixed Sidebar */}
             <Sider
                 breakpoint="lg"
                 collapsedWidth="0"
+                width={240}
                 style={{
                     overflow: 'auto',
                     height: '100vh',
@@ -100,41 +125,62 @@ const AdminLayout = ({ children, currentPage = 'dashboard', onMenuClick }) => {
                     left: 0,
                     top: 0,
                     bottom: 0,
-                    background: '#EE4D2D'
+                    background: '#1a1d29',
+                    zIndex: 1000,
+                    boxShadow: '2px 0 8px rgba(0,0,0,0.08)'
                 }}
             >
+                {/* Logo/Brand */}
                 <div style={{
                     height: 64,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: '#fff',
-                    fontSize: 18,
-                    fontWeight: 'bold',
-                    background: 'rgba(0,0,0,0.1)'
+                    fontSize: 20,
+                    fontWeight: 600,
+                    background: '#151821',
+                    borderBottom: '2px solid rgba(255,255,255,0.08)',
+                    padding: '0 20px'
                 }}>
-                    🔥 Link Manager
+                    <span style={{ marginRight: 8 }}>🔥</span>
+                    <span>Link Manager</span>
                 </div>
                 
+                {/* Menu */}
                 <Menu
                     theme="dark"
                     mode="inline"
                     selectedKeys={[currentPage]}
                     items={menuItems}
-                    onClick={({ key }) => onMenuClick && onMenuClick(key)}
-                    style={{ background: '#EE4D2D', borderRight: 0 }}
+                    onClick={handleMenuClick}
+                    style={{ 
+                        background: '#1a1d29',
+                        borderRight: 0,
+                        padding: '8px 0'
+                    }}
                 />
             </Sider>
             
-            <Layout style={{ marginLeft: 200, background: '#fff' }}>
+            {/* Main Content Area */}
+            <Layout style={{ 
+                marginLeft: 240, 
+                background: '#f5f7fa',
+                minHeight: '100vh'
+            }}>
+                {/* Fixed Header */}
                 <Header style={{
-                    padding: '0 24px',
-                    background: '#fff',
+                    padding: '0 32px',
+                    background: '#ffffff',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                    borderBottom: '3px solid #EE4D2D'
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                    borderBottom: '2px solid #e8eaed',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 999,
+                    height: 64
                 }}>
                     <div />
                     
@@ -147,38 +193,48 @@ const AdminLayout = ({ children, currentPage = 'dashboard', onMenuClick }) => {
                             display: 'flex', 
                             alignItems: 'center', 
                             gap: 12,
-                            maxWidth: 200,
-                            overflow: 'hidden'
-                        }}>
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            transition: 'background 0.2s',
+                            maxWidth: 220
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#f5f7fa'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
                             <Avatar 
                                 src={user?.avatar}
                                 icon={<UserOutlined />} 
                                 style={{ 
                                     background: '#EE4D2D',
                                     flexShrink: 0,
-                                    width: 36,
-                                    height: 36,
-                                    minWidth: 36
+                                    width: 40,
+                                    height: 40,
+                                    minWidth: 40
                                 }} 
                             />
-                            <div style={{ overflow: 'hidden' }}>
-                                <Text strong ellipsis style={{ display: 'block', maxWidth: 120 }}>
+                            <div style={{ overflow: 'hidden', minWidth: 0 }}>
+                                <Text strong ellipsis style={{ 
+                                    display: 'block', 
+                                    maxWidth: 140,
+                                    fontSize: 14,
+                                    lineHeight: 1.4
+                                }}>
                                     {user?.displayName || user?.fullName || user?.username}
                                 </Text>
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    {user?.role === 'admin' ? 'Admin' : 'User'}
+                                <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.2 }}>
+                                    {user?.role === 'admin' ? 'Quản trị viên' : 'Người dùng'}
                                 </Text>
                             </div>
                         </div>
                     </Dropdown>
                 </Header>
                 
+                {/* Scrollable Content */}
                 <Content style={{
-                    margin: '24px 16px',
-                    padding: 24,
-                    background: '#fff',
-                    minHeight: 280,
-                    borderRadius: 8
+                    padding: '32px',
+                    background: '#f5f7fa',
+                    minHeight: 'calc(100vh - 64px)',
+                    overflow: 'auto'
                 }}>
                     {children}
                 </Content>
@@ -187,4 +243,6 @@ const AdminLayout = ({ children, currentPage = 'dashboard', onMenuClick }) => {
     );
 };
 
-export default AdminLayout;
+// Memoize để tránh re-render không cần thiết
+// Sidebar chỉ render 1 lần, chỉ content thay đổi
+export default memo(AdminLayout);

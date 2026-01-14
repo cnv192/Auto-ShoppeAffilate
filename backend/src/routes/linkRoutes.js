@@ -152,7 +152,17 @@ router.get('/:slug/stats', async (req, res) => {
  */
 router.post('/', async (req, res) => {
     try {
-        const { title, targetUrl, imageUrl, customSlug } = req.body;
+        const { 
+            title, 
+            targetUrl, 
+            imageUrl, 
+            customSlug,
+            description,
+            content,
+            category,
+            author,
+            publishedAt
+        } = req.body;
         
         // Validation
         if (!targetUrl) {
@@ -172,11 +182,17 @@ router.post('/', async (req, res) => {
             });
         }
         
+        // Pass all fields to service (service will handle defaults)
         const link = await linkService.createLink({
             title,
             targetUrl,
             imageUrl,
-            customSlug
+            customSlug,
+            description,
+            content,
+            category,
+            author,
+            publishedAt
         });
         
         res.status(201).json({
@@ -200,7 +216,17 @@ router.post('/', async (req, res) => {
 router.put('/:slug', async (req, res) => {
     try {
         const { slug } = req.params;
-        const { title, targetUrl, imageUrl, isActive } = req.body;
+        const { 
+            title, 
+            targetUrl, 
+            imageUrl, 
+            isActive,
+            description,
+            content,
+            category,
+            author,
+            publishedAt
+        } = req.body;
         
         // Validate URL if provided
         if (targetUrl) {
@@ -214,12 +240,19 @@ router.put('/:slug', async (req, res) => {
             }
         }
         
-        const updatedLink = await linkService.updateLink(slug, {
-            title,
-            targetUrl,
-            imageUrl,
-            isActive
-        });
+        // Build update object - only include fields that are provided (not undefined)
+        const updateData = {};
+        if (title !== undefined) updateData.title = title;
+        if (targetUrl !== undefined) updateData.targetUrl = targetUrl;
+        if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+        if (isActive !== undefined) updateData.isActive = isActive;
+        if (description !== undefined) updateData.description = description;
+        if (content !== undefined) updateData.content = content;
+        if (category !== undefined) updateData.category = category;
+        if (author !== undefined) updateData.author = author;
+        if (publishedAt !== undefined) updateData.publishedAt = publishedAt;
+        
+        const updatedLink = await linkService.updateLink(slug, updateData);
         
         if (!updatedLink) {
             return res.status(404).json({

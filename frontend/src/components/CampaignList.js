@@ -19,7 +19,9 @@ import {
     Typography,
     Row,
     Col,
-    Statistic
+    Statistic,
+    Empty,
+    Alert
 } from 'antd';
 import {
     PlayCircleOutlined,
@@ -37,6 +39,7 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/vi';
 import CampaignForm from './CampaignForm';
+import { getApiUrl } from '../config/api';
 import authService from '../services/authService';
 
 dayjs.extend(relativeTime);
@@ -44,13 +47,11 @@ dayjs.locale('vi');
 
 const { Title, Text } = Typography;
 
-// API functions
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-
+// API functions using centralized config
 const campaignApi = {
     getAll: async () => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/campaigns`, {
+        const res = await fetch(getApiUrl('campaigns'), {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('Failed to fetch campaigns');
@@ -58,7 +59,7 @@ const campaignApi = {
     },
     create: async (data) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/campaigns`, {
+        const res = await fetch(getApiUrl('campaigns'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -76,7 +77,7 @@ const campaignApi = {
     },
     update: async (id, data) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/campaigns/${id}`, {
+        const res = await fetch(getApiUrl(`campaigns/${id}`), {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ const campaignApi = {
     },
     delete: async (id) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/campaigns/${id}`, {
+        const res = await fetch(getApiUrl(`campaigns/${id}`), {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -108,7 +109,7 @@ const campaignApi = {
     },
     start: async (id) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/campaigns/${id}/start`, {
+        const res = await fetch(getApiUrl(`campaigns/${id}/start`), {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -122,7 +123,7 @@ const campaignApi = {
     },
     pause: async (id) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/campaigns/${id}/pause`, {
+        const res = await fetch(getApiUrl(`campaigns/${id}/pause`), {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -136,7 +137,7 @@ const campaignApi = {
     },
     stop: async (id) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/campaigns/${id}/stop`, {
+        const res = await fetch(getApiUrl(`campaigns/${id}/stop`), {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -150,7 +151,7 @@ const campaignApi = {
     },
     executeNow: async (id) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/campaigns/${id}/execute-now`, {
+        const res = await fetch(getApiUrl(`campaigns/${id}/execute-now`), {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -167,19 +168,37 @@ const campaignApi = {
 const CampaignList = () => {
     const [campaigns, setCampaigns] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
     const [formVisible, setFormVisible] = useState(false);
     const [editingCampaign, setEditingCampaign] = useState(null);
+    // Track loading states for individual buttons
+    const [actionLoading, setActionLoading] = useState({});
 
     const fetchCampaigns = useCallback(async () => {
         try {
             setLoading(true);
+            setError(null);
             const response = await campaignApi.getAll();
+            
             // Backend returns { success: true, data: { campaigns: [...], total, page, pages } }
+            // or { success: true, data: [...] }
+            if (response.success === false) {
+                throw new Error(response.message || 'Failed to fetch campaigns');
+            }
+            
             const data = response.data || response;
-            setCampaigns(data.campaigns || data || []);
+            const campaignsList = data.campaigns || data || [];
+            
+            if (!Array.isArray(campaignsList)) {
+                throw new Error('Invalid data format from server');
+            }
+            
+            setCampaigns(campaignsList);
         } catch (error) {
-            message.error('Không thể tải danh sách chiến dịch');
-            console.error(error);
+            console.error('Fetch campaigns error:', error);
+            setError(error.message || 'Không thể tải danh sách chiến dịch');
+            message.error(error.message || 'Không thể tải danh sách chiến dịch');
+            setCampaigns([]);
         } finally {
             setLoading(false);
         }
@@ -236,46 +255,102 @@ const CampaignList = () => {
         }
     };
 
+    // Optimistic update helper
+    const updateCampaignOptimistically = (id, updates) => {
+        setCampaigns(prev => prev.map(campaign => 
+            campaign._id === id ? { ...campaign, ...updates } : campaign
+        ));
+    };
+
     const handleStart = async (id) => {
+        const loadingKey = `start-${id}`;
         try {
+            setActionLoading(prev => ({ ...prev, [loadingKey]: true }));
+            
+            // Optimistic update
+            updateCampaignOptimistically(id, { status: 'active' });
+            
             await campaignApi.start(id);
             message.success('Đã khởi động chiến dịch!');
+            
+            // Refresh to get latest data
             fetchCampaigns();
         } catch (error) {
+            // Revert on error
+            fetchCampaigns();
             message.error('Không thể khởi động chiến dịch');
+        } finally {
+            setActionLoading(prev => ({ ...prev, [loadingKey]: false }));
         }
     };
 
     const handlePause = async (id) => {
+        const loadingKey = `pause-${id}`;
         try {
+            setActionLoading(prev => ({ ...prev, [loadingKey]: true }));
+            
+            // Optimistic update
+            updateCampaignOptimistically(id, { status: 'paused' });
+            
             await campaignApi.pause(id);
             message.success('Đã tạm dừng chiến dịch!');
+            
+            // Refresh to get latest data
             fetchCampaigns();
         } catch (error) {
+            // Revert on error
+            fetchCampaigns();
             message.error('Không thể tạm dừng chiến dịch');
+        } finally {
+            setActionLoading(prev => ({ ...prev, [loadingKey]: false }));
         }
     };
 
     const handleStop = async (id) => {
+        const loadingKey = `stop-${id}`;
         try {
+            setActionLoading(prev => ({ ...prev, [loadingKey]: true }));
+            
+            // Optimistic update
+            updateCampaignOptimistically(id, { status: 'stopped' });
+            
             await campaignApi.stop(id);
             message.success('Đã dừng chiến dịch!');
+            
+            // Refresh to get latest data
             fetchCampaigns();
         } catch (error) {
+            // Revert on error
+            fetchCampaigns();
             message.error('Không thể dừng chiến dịch');
+        } finally {
+            setActionLoading(prev => ({ ...prev, [loadingKey]: false }));
         }
     };
 
     const handleExecuteNow = async (id) => {
+        const loadingKey = `execute-${id}`;
         try {
-            const hide = message.loading('Đang thực hiện chiến dịch...', 0);
+            setActionLoading(prev => ({ ...prev, [loadingKey]: true }));
+            
+            // Optimistic update - change status to active temporarily
+            const campaign = campaigns.find(c => c._id === id);
+            if (campaign && campaign.status !== 'active') {
+                updateCampaignOptimistically(id, { status: 'active' });
+            }
+            
             await campaignApi.executeNow(id);
-            hide();
             message.success('Chiến dịch đang được thực hiện ngay lập tức!');
+            
+            // Refresh to get latest data
             fetchCampaigns();
         } catch (error) {
+            // Revert on error
+            fetchCampaigns();
             const errorMsg = error.response?.data?.message || error.message || 'Không thể thực hiện chiến dịch ngay';
             message.error(errorMsg);
+        } finally {
+            setActionLoading(prev => ({ ...prev, [loadingKey]: false }));
         }
     };
 
@@ -420,6 +495,8 @@ const CampaignList = () => {
                                 size="small" 
                                 icon={<RocketOutlined />}
                                 onClick={() => handleExecuteNow(record._id)}
+                                loading={actionLoading[`execute-${record._id}`]}
+                                disabled={actionLoading[`execute-${record._id}`]}
                                 style={{ background: '#52c41a', borderColor: '#52c41a' }}
                             >
                                 Chạy ngay
@@ -434,6 +511,8 @@ const CampaignList = () => {
                                 size="small" 
                                 icon={<PlayCircleOutlined />}
                                 onClick={() => handleStart(record._id)}
+                                loading={actionLoading[`start-${record._id}`]}
+                                disabled={actionLoading[`start-${record._id}`]}
                             />
                         </Tooltip>
                     )}
@@ -443,6 +522,8 @@ const CampaignList = () => {
                                 size="small" 
                                 icon={<PauseCircleOutlined />}
                                 onClick={() => handlePause(record._id)}
+                                loading={actionLoading[`pause-${record._id}`]}
+                                disabled={actionLoading[`pause-${record._id}`]}
                             />
                         </Tooltip>
                     )}
@@ -453,6 +534,8 @@ const CampaignList = () => {
                                 size="small" 
                                 icon={<PlayCircleOutlined />}
                                 onClick={() => handleStart(record._id)}
+                                loading={actionLoading[`start-${record._id}`]}
+                                disabled={actionLoading[`start-${record._id}`]}
                             />
                         </Tooltip>
                     )}
@@ -461,9 +544,16 @@ const CampaignList = () => {
                             title="Dừng chiến dịch?"
                             description="Sau khi dừng, bạn cần tạo chiến dịch mới để chạy lại"
                             onConfirm={() => handleStop(record._id)}
+                            disabled={actionLoading[`stop-${record._id}`]}
                         >
                             <Tooltip title="Dừng hoàn toàn">
-                                <Button size="small" danger icon={<StopOutlined />} />
+                                <Button 
+                                    size="small" 
+                                    danger 
+                                    icon={<StopOutlined />}
+                                    loading={actionLoading[`stop-${record._id}`]}
+                                    disabled={actionLoading[`stop-${record._id}`]}
+                                />
                             </Tooltip>
                         </Popconfirm>
                     )}
@@ -568,18 +658,51 @@ const CampaignList = () => {
                 </Col>
             </Row>
 
+            {/* Error Alert */}
+            {error && !loading && (
+                <Alert
+                    message="Lỗi tải dữ liệu"
+                    description={error}
+                    type="error"
+                    showIcon
+                    closable
+                    onClose={() => setError(null)}
+                    action={
+                        <Button size="small" onClick={fetchCampaigns}>
+                            Thử lại
+                        </Button>
+                    }
+                    style={{ marginBottom: 24 }}
+                />
+            )}
+
             {/* Table */}
             <Card style={{ borderRadius: 8 }}>
-                <Table
-                    columns={columns}
-                    dataSource={campaigns}
-                    rowKey="_id"
-                    loading={loading}
-                    pagination={{
-                        pageSize: 10,
-                        showTotal: (total) => `Tổng ${total} chiến dịch`
-                    }}
-                />
+                {!loading && !error && campaigns.length === 0 ? (
+                    <Empty 
+                        description="Chưa có chiến dịch nào"
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    >
+                        <Button 
+                            type="primary" 
+                            icon={<PlusOutlined />}
+                            onClick={handleCreate}
+                        >
+                            Tạo Chiến dịch Đầu Tiên
+                        </Button>
+                    </Empty>
+                ) : (
+                    <Table
+                        columns={columns}
+                        dataSource={campaigns}
+                        rowKey="_id"
+                        loading={loading}
+                        pagination={{
+                            pageSize: 10,
+                            showTotal: (total) => `Tổng ${total} chiến dịch`
+                        }}
+                    />
+                )}
             </Card>
 
             {/* Form Modal */}

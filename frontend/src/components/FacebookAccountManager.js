@@ -46,6 +46,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/vi';
 import authService from '../services/authService';
 import ExtensionSetupGuide from './ExtensionSetupGuide';
+import { getApiUrl } from '../config/api';
 
 dayjs.extend(relativeTime);
 dayjs.locale('vi');
@@ -53,12 +54,10 @@ dayjs.locale('vi');
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-
 const fbApi = {
     getAll: async () => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/facebook-accounts`, {
+        const res = await fetch(getApiUrl('facebook-accounts'), {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('Failed to fetch accounts');
@@ -66,7 +65,7 @@ const fbApi = {
     },
     create: async (data) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/facebook-accounts`, {
+        const res = await fetch(getApiUrl('facebook-accounts'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -79,7 +78,7 @@ const fbApi = {
     },
     update: async (id, data) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/facebook-accounts/${id}`, {
+        const res = await fetch(getApiUrl(`facebook-accounts/${id}`), {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -92,7 +91,7 @@ const fbApi = {
     },
     delete: async (id) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/facebook-accounts/${id}`, {
+        const res = await fetch(getApiUrl(`facebook-accounts/${id}`), {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -101,7 +100,7 @@ const fbApi = {
     },
     refresh: async (id) => {
         const token = authService.getToken();
-        const res = await fetch(`${API_URL}/api/facebook-accounts/${id}/refresh`, {
+        const res = await fetch(getApiUrl(`facebook-accounts/${id}/refresh`), {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` }
         });

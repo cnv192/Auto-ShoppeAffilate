@@ -14,7 +14,17 @@ const { analyzeIP } = require('../middleware/ipFilter');
  * @returns {Object} - Link đã tạo
  */
 const createLink = async (linkData) => {
-    const { title, targetUrl, imageUrl, customSlug, description } = linkData;
+    const { 
+        title, 
+        targetUrl, 
+        imageUrl, 
+        customSlug, 
+        description,
+        content,
+        category,
+        author,
+        publishedAt
+    } = linkData;
     
     try {
         const link = await Link.createWithAutoSlug({
@@ -22,7 +32,11 @@ const createLink = async (linkData) => {
             title: title || 'Shopee Deal',
             targetUrl,
             imageUrl: imageUrl || 'https://cf.shopee.vn/file/default_image',
-            description
+            description: description || '',
+            content: content || '',
+            category: category || 'Khuyến mãi',
+            author: author || 'Shopee Deals VN',
+            publishedAt: publishedAt ? new Date(publishedAt) : new Date()
         });
         
         console.log(`✅ [LinkService] Tạo link: /${link.slug} → ${targetUrl}`);

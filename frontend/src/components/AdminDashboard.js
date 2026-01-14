@@ -76,13 +76,32 @@ function AdminDashboard() {
     // Handle form submit (create or update)
     const handleFormSubmit = async (values) => {
         try {
+            // Map customSlug to slug for backend, ensure all fields are included
+            const linkData = {
+                ...values,
+                customSlug: values.customSlug || values.slug, // Backend expects customSlug
+                description: values.description || '',
+                content: values.content || '',
+                category: values.category || 'Khuyến mãi',
+                author: values.author || 'Shopee Deals VN',
+                publishedAt: values.publishedAt || new Date().toISOString()
+            };
+            
+            // Remove slug field as backend uses customSlug
+            delete linkData.slug;
+            
+            console.log('📤 [AdminDashboard] Submitting link data:', {
+                ...linkData,
+                content: linkData.content ? `${linkData.content.substring(0, 50)}...` : 'empty'
+            });
+            
             if (editingLink) {
                 // Update existing link - use slug (not _id) as identifier
-                await updateLink(editingLink.slug, values);
+                await updateLink(editingLink.slug, linkData);
                 message.success('Cập nhật link thành công!');
             } else {
                 // Create new link
-                await createLink(values);
+                await createLink(linkData);
                 message.success('Tạo link mới thành công!');
             }
             
@@ -91,6 +110,7 @@ function AdminDashboard() {
             fetchLinks();
             
         } catch (error) {
+            console.error('❌ [AdminDashboard] Submit error:', error);
             message.error(error.message || 'Có lỗi xảy ra');
         }
     };

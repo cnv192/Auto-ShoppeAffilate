@@ -1,3 +1,5 @@
+process.noDeprecation = true;
+
 const { createCanvas } = require('canvas');
 const fs = require('fs');
 

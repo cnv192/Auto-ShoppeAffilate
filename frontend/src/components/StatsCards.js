@@ -28,61 +28,109 @@ const StatsCards = ({ links = [] }) => {
 
     const cardStyle = {
         borderRadius: 12,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+        border: '2px solid #e8eaed',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        transition: 'all 0.3s ease',
+        height: '100%'
     };
 
     return (
-        <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Row gutter={[20, 20]}>
             <Col xs={24} sm={12} lg={6}>
-                <Card style={cardStyle} variant="borderless">
+                <Card 
+                    style={cardStyle}
+                    hoverable
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#EE4D2D';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(238, 77, 45, 0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = '#e8eaed';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
+                    }}
+                >
                     <Statistic
-                        title="Tổng số Link"
+                        title={<span style={{ fontSize: 14, color: '#6b7280' }}>Tổng số Link</span>}
                         value={totalLinks}
-                        prefix={<LinkOutlined style={{ color: '#EE4D2D' }} />}
-                        valueStyle={{ color: '#EE4D2D' }}
+                        prefix={<LinkOutlined style={{ color: '#EE4D2D', fontSize: 20 }} />}
+                        valueStyle={{ color: '#1a1d29', fontSize: 24, fontWeight: 600 }}
                     />
                 </Card>
             </Col>
             
             <Col xs={24} sm={12} lg={6}>
-                <Card style={cardStyle} variant="borderless">
+                <Card 
+                    style={cardStyle}
+                    hoverable
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#52c41a';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(82, 196, 26, 0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = '#e8eaed';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
+                    }}
+                >
                     <Statistic
-                        title="Tổng Clicks"
+                        title={<span style={{ fontSize: 14, color: '#6b7280' }}>Tổng Clicks</span>}
                         value={totalClicks}
-                        prefix={<EyeOutlined style={{ color: '#52c41a' }} />}
-                        valueStyle={{ color: '#52c41a' }}
+                        prefix={<EyeOutlined style={{ color: '#52c41a', fontSize: 20 }} />}
+                        valueStyle={{ color: '#1a1d29', fontSize: 24, fontWeight: 600 }}
                     />
                 </Card>
             </Col>
             
             <Col xs={24} sm={12} lg={6}>
-                <Card style={cardStyle} variant="borderless">
+                <Card 
+                    style={cardStyle}
+                    hoverable
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#1890ff';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(24, 144, 255, 0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = '#e8eaed';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
+                    }}
+                >
                     <Statistic
-                        title="Link Hoạt động"
+                        title={<span style={{ fontSize: 14, color: '#6b7280' }}>Link Hoạt động</span>}
                         value={activeLinks}
                         suffix={`/ ${totalLinks}`}
-                        prefix={<RiseOutlined style={{ color: '#1890ff' }} />}
-                        valueStyle={{ color: '#1890ff' }}
+                        prefix={<RiseOutlined style={{ color: '#1890ff', fontSize: 20 }} />}
+                        valueStyle={{ color: '#1a1d29', fontSize: 24, fontWeight: 600 }}
                     />
                 </Card>
             </Col>
             
             <Col xs={24} sm={12} lg={6}>
-                <Card style={cardStyle} variant="borderless">
+                <Card 
+                    style={cardStyle}
+                    hoverable
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = '#fa8c16';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(250, 140, 22, 0.12)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = '#e8eaed';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
+                    }}
+                >
                     <Statistic
-                        title="Link Hot nhất"
+                        title={<span style={{ fontSize: 14, color: '#6b7280' }}>Link Hot nhất</span>}
                         value={topLink.clicks || 0}
                         suffix="clicks"
-                        prefix={<FireOutlined style={{ color: '#fa8c16' }} />}
-                        valueStyle={{ color: '#fa8c16' }}
+                        prefix={<FireOutlined style={{ color: '#fa8c16', fontSize: 20 }} />}
+                        valueStyle={{ color: '#1a1d29', fontSize: 24, fontWeight: 600 }}
                     />
                     {topLink.slug && (
                         <div style={{ 
-                            marginTop: 8, 
-                            fontSize: 12, 
-                            color: '#999',
+                            marginTop: 12, 
+                            fontSize: 13, 
+                            color: '#6b7280',
                             overflow: 'hidden',
-                            textOverflow: 'ellipsis'
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
                         }}>
                             /{topLink.slug}
                         </div>

@@ -8,7 +8,7 @@
  * - Password
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Card,
     Form,
@@ -33,10 +33,9 @@ import {
     LoadingOutlined
 } from '@ant-design/icons';
 import authService from '../services/authService';
+import { getApiUrl } from '../config/api';
 
 const { Title, Text } = Typography;
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const UserProfile = () => {
     const [form] = Form.useForm();
@@ -47,16 +46,12 @@ const UserProfile = () => {
     const [userData, setUserData] = useState(null);
     const [avatarUrl, setAvatarUrl] = useState(null);
 
-    useEffect(() => {
-        fetchUserProfile();
-    }, []);
-
-    const fetchUserProfile = async () => {
+    const fetchUserProfile = useCallback(async () => {
         try {
             setLoading(true);
             const token = authService.getToken();
             
-            const res = await fetch(`${API_URL}/api/users/profile`, {
+            const res = await fetch(getApiUrl('users/profile'), {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await res.json();
@@ -78,7 +73,11 @@ const UserProfile = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [form]);
+
+    useEffect(() => {
+        fetchUserProfile();
+    }, [fetchUserProfile]);
 
     /**
      * Upload avatar lên Cloudinary
@@ -91,7 +90,7 @@ const UserProfile = () => {
             const formData = new FormData();
             formData.append('file', file);
             
-            const res = await fetch(`${API_URL}/api/upload`, {
+            const res = await fetch(getApiUrl('upload'), {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
@@ -123,7 +122,7 @@ const UserProfile = () => {
             setSaving(true);
             const token = authService.getToken();
             
-            const res = await fetch(`${API_URL}/api/users/profile`, {
+            const res = await fetch(getApiUrl('users/profile'), {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -166,7 +165,7 @@ const UserProfile = () => {
             setSaving(true);
             const token = authService.getToken();
             
-            const res = await fetch(`${API_URL}/api/users/change-password`, {
+            const res = await fetch(getApiUrl('users/change-password'), {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,

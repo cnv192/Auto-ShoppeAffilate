@@ -259,7 +259,7 @@ const campaignSchema = new mongoose.Schema({
     activityLogs: [{
         action: {
             type: String,
-            enum: ['started', 'paused', 'resumed', 'stopped', 'completed', 'blocked', 'comment_sent', 'comment_failed', 'comment_removed'],
+            enum: ['started', 'paused', 'resumed', 'stopped', 'completed', 'blocked', 'comment_sent', 'comment_failed', 'comment_removed', 'reply_sent'],
             required: true
         },
         message: {

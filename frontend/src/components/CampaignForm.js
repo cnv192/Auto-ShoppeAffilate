@@ -2,6 +2,11 @@
  * Campaign Form Component
  * 
  * Form tạo/chỉnh sửa chiến dịch Facebook Marketing
+ * 
+ * Features:
+ * - Create/Edit campaigns
+ * - Resource Set integration (load presets for templates, groups, pages)
+ * - Dual-mode comment support
  */
 
 import React, { useState, useEffect } from 'react';
@@ -20,14 +25,18 @@ import {
     Tag,
     Space,
     message,
-    Alert
+    Alert,
+    Button,
+    Tooltip
 } from 'antd';
 import {
     RocketOutlined,
     ClockCircleOutlined,
     FilterOutlined,
     MessageOutlined,
-    LinkOutlined
+    LinkOutlined,
+    FolderOpenOutlined,
+    AppstoreAddOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import authService from '../services/authService';
@@ -43,6 +52,12 @@ const CampaignForm = ({ visible, editingCampaign, onSubmit, onCancel }) => {
     const [links, setLinks] = useState([]);
     const [facebookAccounts, setFacebookAccounts] = useState([]);
     const [loading, setLoading] = useState(false);
+    
+    // Resource Sets state
+    const [commentSets, setCommentSets] = useState([]);
+    const [groupSets, setGroupSets] = useState([]);
+    const [pageSets, setPageSets] = useState([]);
+    const [loadingResourceSets, setLoadingResourceSets] = useState(false);
 
     // Fetch links and FB accounts
     useEffect(() => {
@@ -63,8 +78,18 @@ const CampaignForm = ({ visible, editingCampaign, onSubmit, onCancel }) => {
                 });
                 const fbData = await fbRes.json();
                 setFacebookAccounts(fbData.data || fbData.accounts || []);
+                
+                // Fetch Resource Sets by type
+                setLoadingResourceSets(true);
+                await Promise.all([
+                    fetchResourceSets('comment', setCommentSets),
+                    fetchResourceSets('group', setGroupSets),
+                    fetchResourceSets('page', setPageSets)
+                ]);
+                setLoadingResourceSets(false);
             } catch (error) {
                 console.error('Error fetching data:', error);
+                setLoadingResourceSets(false);
             }
         };
 
@@ -72,26 +97,91 @@ const CampaignForm = ({ visible, editingCampaign, onSubmit, onCancel }) => {
             fetchData();
         }
     }, [visible]);
+    
+    // Fetch resource sets by type
+    const fetchResourceSets = async (type, setter) => {
+        try {
+            const token = authService.getToken();
+            const res = await fetch(`${API_URL}/api/resource-sets/by-type/${type}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setter(data.data || []);
+            }
+        } catch (error) {
+            console.error(`Error fetching ${type} resource sets:`, error);
+        }
+    };
+    
+    // Load content from a Resource Set into a form field
+    const loadResourceSet = async (setId, fieldName, mode = 'replace') => {
+        if (!setId) return;
+        
+        try {
+            const token = authService.getToken();
+            
+            // Mark as used and get content
+            const res = await fetch(`${API_URL}/api/resource-sets/${setId}/use`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            
+            if (data.success && data.data?.contentString) {
+                const currentValue = form.getFieldValue(fieldName) || '';
+                
+                if (mode === 'append' && currentValue) {
+                    // Append to existing content
+                    form.setFieldValue(fieldName, currentValue + '\n' + data.data.contentString);
+                    message.success('Đã thêm nội dung từ Resource Set');
+                } else {
+                    // Replace content
+                    form.setFieldValue(fieldName, data.data.contentString);
+                    message.success('Đã tải nội dung từ Resource Set');
+                }
+            }
+        } catch (error) {
+            console.error('Error loading resource set:', error);
+            message.error('Không thể tải Resource Set');
+        }
+    };
 
     // Set form values when editing
     useEffect(() => {
         if (visible && editingCampaign) {
+            // Extract facebookAccountId properly - it might be an object {_id: "..."} or just a string
+            const fbAccountId = typeof editingCampaign.facebookAccountId === 'object' 
+                ? editingCampaign.facebookAccountId?._id 
+                : editingCampaign.facebookAccountId;
+            
+            // Use actual database values - don't apply defaults that override real 0 values
             form.setFieldsValue({
                 name: editingCampaign.name,
                 slugs: editingCampaign.slugs || [],
                 commentTemplates: editingCampaign.commentTemplates?.join('\n') || '',
                 startTime: editingCampaign.startTime ? dayjs(editingCampaign.startTime, 'HH:mm') : dayjs('08:00', 'HH:mm'),
-                durationHours: editingCampaign.durationHours || 5,
-                minLikes: editingCampaign.filters?.minLikes || 100,
-                minComments: editingCampaign.filters?.minComments || 10,
-                minShares: editingCampaign.filters?.minShares || 5,
-                maxCommentsPerPost: editingCampaign.maxCommentsPerPost || 3,
-                delayMin: editingCampaign.delayMin || 30,
-                delayMax: editingCampaign.delayMax || 90,
+                durationHours: editingCampaign.durationHours ?? 5,
+                // FIX: Use nullish coalescing (??) instead of || to preserve 0 values from DB
+                minLikes: editingCampaign.filters?.minLikes ?? 0,
+                minComments: editingCampaign.filters?.minComments ?? 0,
+                minShares: editingCampaign.filters?.minShares ?? 0,
+                maxCommentsPerPost: editingCampaign.maxCommentsPerPost ?? 3,
+                delayMin: editingCampaign.delayMin ?? 30,
+                delayMax: editingCampaign.delayMax ?? 90,
                 linkGroups: editingCampaign.linkGroups?.join('\n') || '',
                 fanpages: editingCampaign.fanpages?.join('\n') || '',
                 targetPostIds: editingCampaign.targetPostIds?.join('\n') || '',
-                facebookAccountId: editingCampaign.facebookAccountId
+                // FIX: Handle facebookAccountId as object or string
+                facebookAccountId: fbAccountId
+            });
+            
+            console.log('📝 [Edit Mode] Loaded campaign:', {
+                name: editingCampaign.name,
+                minLikes: editingCampaign.filters?.minLikes,
+                minComments: editingCampaign.filters?.minComments,
+                minShares: editingCampaign.filters?.minShares,
+                facebookAccountId: fbAccountId
             });
         } else if (visible) {
             form.resetFields();
@@ -295,9 +385,42 @@ const CampaignForm = ({ visible, editingCampaign, onSubmit, onCancel }) => {
                                     </div>
                                 }
                             >
-                                <TextArea 
-                                    rows={6} 
-                                    placeholder={`💬 MODE A - Direct Comment:
+                                <div>
+                                    {/* Resource Set Loader */}
+                                    <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <FolderOpenOutlined style={{ color: '#1890ff' }} />
+                                        <Select
+                                            placeholder="📂 Tải từ Resource Set..."
+                                            style={{ flex: 1 }}
+                                            allowClear
+                                            loading={loadingResourceSets}
+                                            onChange={(value) => value && loadResourceSet(value, 'commentTemplates', 'replace')}
+                                        >
+                                            {commentSets.map(set => (
+                                                <Option key={set._id} value={set._id}>
+                                                    {set.displayLabel || `${set.name} (${set.content?.length || 0} items)`}
+                                                    {set.isDefault && <Tag color="blue" style={{ marginLeft: 8 }}>Default</Tag>}
+                                                </Option>
+                                            ))}
+                                        </Select>
+                                        <Tooltip title="Thêm vào cuối (không xóa nội dung hiện tại)">
+                                            <Button 
+                                                icon={<AppstoreAddOutlined />}
+                                                onClick={() => {
+                                                    const selectEl = document.querySelector('[placeholder="📂 Tải từ Resource Set..."]');
+                                                    const selectedValue = selectEl?._value;
+                                                    if (selectedValue) {
+                                                        loadResourceSet(selectedValue, 'commentTemplates', 'append');
+                                                    } else {
+                                                        message.info('Chọn Resource Set trước');
+                                                    }
+                                                }}
+                                            />
+                                        </Tooltip>
+                                    </div>
+                                    <TextArea 
+                                        rows={6} 
+                                        placeholder={`💬 MODE A - Direct Comment:
 Deal hot đây mọi người ơi! 🔥 {link}
 Ai đang tìm sản phẩm này không? 👉 {link}
 Mình vừa mua được giá tốt: {link}
@@ -305,7 +428,8 @@ Mình vừa mua được giá tốt: {link}
 ↩️ MODE B - Reply to Comment:
 Xin chào {name}! Check deal này nha: {link}
 Cảm ơn {name} đã quan tâm! Link đây: {link}`}
-                                />
+                                    />
+                                </div>
                             </Form.Item>
                         </Col>
                     </Row>
@@ -437,11 +561,31 @@ https://www.facebook.com/groups/xxx/posts/987654321`}
                                 label={<><strong>📁 Facebook Groups</strong> <Tag color="green">ĐÃ HỖ TRỢ</Tag></>}
                                 extra="Tự động crawl bài viết từ Groups. Mỗi dòng 1 link group."
                             >
-                                <Input.TextArea 
-                                    rows={3} 
-                                    placeholder={`https://facebook.com/groups/shopee-deal
+                                <div>
+                                    {/* Resource Set Loader for Groups */}
+                                    <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <FolderOpenOutlined style={{ color: '#52c41a' }} />
+                                        <Select
+                                            placeholder="📂 Tải Groups từ Set..."
+                                            style={{ flex: 1 }}
+                                            allowClear
+                                            loading={loadingResourceSets}
+                                            onChange={(value) => value && loadResourceSet(value, 'linkGroups', 'replace')}
+                                        >
+                                            {groupSets.map(set => (
+                                                <Option key={set._id} value={set._id}>
+                                                    {set.displayLabel || `${set.name} (${set.content?.length || 0} groups)`}
+                                                    {set.isDefault && <Tag color="blue" style={{ marginLeft: 8 }}>Default</Tag>}
+                                                </Option>
+                                            ))}
+                                        </Select>
+                                    </div>
+                                    <Input.TextArea 
+                                        rows={3} 
+                                        placeholder={`https://facebook.com/groups/shopee-deal
 https://facebook.com/groups/ma-giam-gia`}
-                                />
+                                    />
+                                </div>
                             </Form.Item>
                         </Col>
                         <Col span={12}>
@@ -450,11 +594,31 @@ https://facebook.com/groups/ma-giam-gia`}
                                 label={<><strong>📄 Fanpages</strong> <Tag color="green">ĐÃ HỖ TRỢ</Tag></>}
                                 extra="Tự động crawl bài viết từ Fanpages. Mỗi dòng 1 link page."
                             >
-                                <Input.TextArea 
-                                    rows={3} 
-                                    placeholder={`https://facebook.com/shopee.vn
+                                <div>
+                                    {/* Resource Set Loader for Pages */}
+                                    <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <FolderOpenOutlined style={{ color: '#722ed1' }} />
+                                        <Select
+                                            placeholder="📂 Tải Pages từ Set..."
+                                            style={{ flex: 1 }}
+                                            allowClear
+                                            loading={loadingResourceSets}
+                                            onChange={(value) => value && loadResourceSet(value, 'fanpages', 'replace')}
+                                        >
+                                            {pageSets.map(set => (
+                                                <Option key={set._id} value={set._id}>
+                                                    {set.displayLabel || `${set.name} (${set.content?.length || 0} pages)`}
+                                                    {set.isDefault && <Tag color="blue" style={{ marginLeft: 8 }}>Default</Tag>}
+                                                </Option>
+                                            ))}
+                                        </Select>
+                                    </div>
+                                    <Input.TextArea 
+                                        rows={3} 
+                                        placeholder={`https://facebook.com/shopee.vn
 https://facebook.com/deal-hot`}
-                                />
+                                    />
+                                </div>
                             </Form.Item>
                         </Col>
                     </Row>
