@@ -2,11 +2,12 @@
  * Redirect Routes
  * 
  * Xử lý redirect cho người dùng và bot preview
+ * Tích hợp IP checking và MongoDB tracking
  */
 
 const express = require('express');
 const router = express.Router();
-const linkService = require('../services/linkService');
+const linkServiceMongo = require('../services/linkServiceMongo');
 const { smartRoutingMiddleware } = require('../middleware/smartRouting');
 
 /**
@@ -14,16 +15,18 @@ const { smartRoutingMiddleware } = require('../middleware/smartRouting');
  * Route chính để xử lý redirect
  * 
  * Workflow:
- * 1. Middleware kiểm tra User-Agent
- * 2. Nếu là bot → Render trang preview (chỉ có meta tags)
- * 3. Nếu là người dùng → Render trang redirect (có deep link logic)
+ * 1. Middleware kiểm tra User-Agent và IP (IP2Location)
+ * 2. Nếu là bot preview → Render trang preview
+ * 3. Nếu là người dùng:
+ *    - Ghi click vào MongoDB (valid/invalid dựa trên IP check)
+ *    - Render trang redirect
  */
 router.get('/:slug', smartRoutingMiddleware, async (req, res) => {
     const { slug } = req.params;
     
     try {
-        // Lấy thông tin link từ database
-        const link = await linkService.getLinkBySlug(slug);
+        // Lấy thông tin link từ MongoDB
+        const link = await linkServiceMongo.getLinkBySlug(slug);
         
         // Nếu không tìm thấy link
         if (!link) {
@@ -34,7 +37,7 @@ router.get('/:slug', smartRoutingMiddleware, async (req, res) => {
         }
         
         // Kiểm tra link còn active không
-        if (!link.isActive) {
+        if (!link.isAvailable()) {
             return res.status(410).render('error', {
                 title: 'Link đã ngưng hoạt động',
                 message: 'Link này đã bị vô hiệu hóa'
@@ -48,26 +51,43 @@ router.get('/:slug', smartRoutingMiddleware, async (req, res) => {
         if (req.isPreviewBot) {
             console.log(`🤖 Serving preview page for bot: ${req.botType}`);
             
-            // Render trang preview nhẹ (chỉ có meta tags)
             return res.render('preview', {
                 title: link.title,
-                description: `Xem ngay deal hot trên Shopee với giá ưu đãi đặc biệt! ${link.title}`,
+                description: link.description || `Xem ngay deal hot trên Shopee!`,
                 imageUrl: link.imageUrl,
                 currentUrl,
                 targetUrl: link.targetUrl
             });
         }
         
-        // === XỬ LÝ NGƯỜI DÙNG THỰC ===
-        console.log(`👤 Serving redirect page for user: ${req.clientIP}`);
+        // === XỬ LÝ NGƯỜI DÙNG - GHI CLICK VÀO MONGODB ===
+        // req.isValidClick được set bởi smartRoutingMiddleware sau khi check IP2Location
+        const clickResult = await linkServiceMongo.recordClick(slug, {
+            ip: req.clientIP,
+            userAgent: req.userAgent,
+            referer: req.referer,
+            device: req.deviceType,
+            // isValidClick = true nếu IP từ VN và không phải datacenter
+            isValid: req.isValidClick,
+            invalidReason: req.isValidClick ? null : req.ipAnalysis?.reason
+        });
         
-        // Render trang redirect với Deep Link logic
-        res.render('redirect', {
+        console.log(`� Article: /${slug} | IP: ${req.clientIP} | Valid: ${req.isValidClick} | Total: ${clickResult.totalClicks}`);
+        
+        // === RENDER TRANG BÀI VIẾT (ARTICLE PAGE) ===
+        // Hiển thị bài viết với Cookie Injection techniques
+        res.render('article', {
             title: link.title,
+            description: link.description || 'Xem ngay deal hot trên Shopee!',
             imageUrl: link.imageUrl,
             targetUrl: link.targetUrl,
+            content: link.content || '<p>Đang cập nhật nội dung...</p>',
             currentUrl,
-            slug
+            slug,
+            publishedAt: link.publishedAt || new Date(),
+            author: link.author || 'Shopee Deals VN',
+            category: link.category || 'Khuyến mãi',
+            tags: link.tags || []
         });
         
     } catch (error) {

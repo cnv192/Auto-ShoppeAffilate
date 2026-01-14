@@ -105,6 +105,38 @@ const LinkSchema = new Schema({
         default: 'Xem ngay deal hot trên Shopee với giá ưu đãi đặc biệt!'
     },
     
+    // === CONTENT - Trang bài viết ===
+    
+    // Nội dung bài viết HTML (từ Summernote editor)
+    content: {
+        type: String,
+        trim: true,
+        default: ''
+    },
+    
+    // Ngày đăng (hiển thị trên bài viết)
+    publishedAt: {
+        type: Date,
+        default: Date.now
+    },
+    
+    // Tác giả
+    author: {
+        type: String,
+        default: 'Shopee Deals VN'
+    },
+    
+    // Danh mục
+    category: {
+        type: String,
+        default: 'Khuyến mãi'
+    },
+    
+    // Tags
+    tags: [{
+        type: String
+    }],
+    
     // === TRACKING STATS ===
     
     // Tổng số click (tất cả)
@@ -175,7 +207,14 @@ const LinkSchema = new Schema({
         maxlength: 1000
     },
     
-    // Người tạo (nếu có auth)
+    // User sở hữu link (ObjectId reference)
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        index: true
+    },
+    
+    // Người tạo (legacy - kept for compatibility)
     createdBy: {
         type: String,
         default: 'system'

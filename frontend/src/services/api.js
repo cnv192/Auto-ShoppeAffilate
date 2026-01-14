@@ -25,7 +25,8 @@ const api = axios.create({
 export const getAllLinks = async () => {
     try {
         const response = await api.get('/api/links');
-        return response.data;
+        // API returns { success: true, data: [...] }
+        return response.data.data || response.data || [];
     } catch (error) {
         console.error('Error fetching links:', error);
         throw error;

@@ -1,16 +1,19 @@
 /**
  * Smart Routing Middleware - Phân Luồng Thông Minh
  * 
- * Middleware này kiểm tra User-Agent để phân biệt:
+ * Middleware này kiểm tra User-Agent và IP để phân biệt:
  * 1. Bot Preview (Facebook, Twitter, Zalo, Google) → Trả về trang HTML tĩnh với Open Graph meta
- * 2. Người dùng thực → Lưu IP tracking và chuyển tiếp request
+ * 2. Bot/Datacenter (từ IP2Location) → Không tăng click
+ * 3. Người dùng thực từ VN → Tăng click trong MongoDB
  * 
- * Mục đích:
- * - Tối ưu băng thông: Bot chỉ nhận HTML nhẹ với meta tags
- * - Theo dõi analytics: Đếm click từ người dùng thực
+ * Tích hợp:
+ * - IP2Location: Kiểm tra IP từ sample.bin.db11
+ * - MongoDB: Lưu trữ và tracking clicks
+ * - Redis: Rate limiting và cache
  */
 
 const { redisClient } = require('../config/redis');
+const { analyzeIP, getClientIP: getIPFromFilter } = require('./ipFilter');
 
 // Danh sách các User-Agent của bot preview các nền tảng mạng xã hội
 const PREVIEW_BOTS = [
@@ -68,67 +71,87 @@ const isPreviewBot = (userAgent) => {
 };
 
 /**
- * Lấy IP thực của người dùng (xử lý trường hợp có proxy/load balancer)
+ * Lấy IP thực của người dùng (xử lý proxy/cloudflare)
+ * Sử dụng hàm từ ipFilter để đảm bảo nhất quán
  * @param {object} req - Express request object
  * @returns {string} - IP address
  */
 const getClientIP = (req) => {
-    return req.headers['x-forwarded-for']?.split(',')[0].trim() 
-        || req.headers['x-real-ip'] 
-        || req.connection?.remoteAddress 
-        || req.ip 
-        || 'unknown';
+    return getIPFromFilter(req);
 };
 
 /**
- * Lưu thông tin truy cập vào Redis
+ * Xác định loại thiết bị từ User-Agent
+ * @param {string} userAgent - User-Agent string
+ * @returns {string} - 'mobile', 'tablet', 'desktop', 'unknown'
+ */
+const getDeviceType = (userAgent) => {
+    if (!userAgent) return 'unknown';
+    
+    const ua = userAgent.toLowerCase();
+    
+    if (/mobile|android|iphone|ipod|blackberry|windows phone/i.test(ua)) {
+        return 'mobile';
+    }
+    if (/tablet|ipad|playbook|silk/i.test(ua)) {
+        return 'tablet';
+    }
+    if (/mozilla|chrome|safari|firefox|edge|opera/i.test(ua)) {
+        return 'desktop';
+    }
+    return 'unknown';
+};
+
+/**
+ * Lưu thông tin truy cập vào Redis (backup/cache)
  * @param {string} ip - IP của người dùng
  * @param {string} slug - Slug của link được truy cập
+ * @param {boolean} isValid - Click có hợp lệ không
  */
-const trackVisit = async (ip, slug) => {
+const trackVisitRedis = async (ip, slug, isValid = true) => {
     try {
         if (!redisClient.isReady) return;
         
-        const now = Date.now();
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const today = new Date().toISOString().split('T')[0];
         
-        // Lưu IP với timestamp vào sorted set (để tracking tần suất)
-        // Key: visits:{slug}:{date}
-        // Score: timestamp
-        // Value: ip
-        await redisClient.zAdd(`visits:${slug}:${today}`, {
-            score: now,
-            value: `${ip}:${now}`
-        });
+        // Tăng counter tổng
+        await redisClient.incr(`clicks:${slug}:total`);
         
-        // Tăng counter cho slug
-        await redisClient.incr(`clicks:${slug}`);
+        // Tăng counter hợp lệ nếu valid
+        if (isValid) {
+            await redisClient.incr(`clicks:${slug}:valid`);
+        }
         
-        // Tăng counter tổng theo ngày
+        // Counter theo ngày
         await redisClient.incr(`clicks:${slug}:${today}`);
         
-        // Set TTL 30 ngày cho dữ liệu tracking
-        await redisClient.expire(`visits:${slug}:${today}`, 30 * 24 * 60 * 60);
+        // TTL 30 ngày
         await redisClient.expire(`clicks:${slug}:${today}`, 30 * 24 * 60 * 60);
         
     } catch (error) {
-        console.error('Error tracking visit:', error);
+        console.error('Error tracking to Redis:', error);
     }
 };
 
 /**
- * Lấy số click của một link
+ * Lấy số click của một link từ Redis
  * @param {string} slug - Slug của link
- * @returns {number} - Số click
+ * @returns {Object} - Số click { total, valid }
  */
 const getClickCount = async (slug) => {
     try {
-        if (!redisClient.isReady) return 0;
-        const count = await redisClient.get(`clicks:${slug}`);
-        return parseInt(count) || 0;
+        if (!redisClient.isReady) return { total: 0, valid: 0 };
+        
+        const total = await redisClient.get(`clicks:${slug}:total`);
+        const valid = await redisClient.get(`clicks:${slug}:valid`);
+        
+        return {
+            total: parseInt(total) || 0,
+            valid: parseInt(valid) || 0
+        };
     } catch (error) {
         console.error('Error getting click count:', error);
-        return 0;
+        return { total: 0, valid: 0 };
     }
 };
 
@@ -160,29 +183,37 @@ const isRateLimited = async (ip, slug) => {
 };
 
 /**
- * Main Middleware: Smart Routing
- * Phân biệt bot preview và người dùng thực để xử lý phù hợp
+ * Main Middleware: Smart Routing với IP Checking
+ * 
+ * Flow:
+ * 1. Lấy IP thực từ request
+ * 2. Kiểm tra User-Agent có phải bot preview không
+ * 3. Nếu là người dùng:
+ *    - Kiểm tra IP qua IP2Location (sample.bin.db11)
+ *    - Xác định click có hợp lệ không (VN + không phải datacenter)
+ *    - Gắn thông tin vào request để route xử lý lưu MongoDB
  */
 const smartRoutingMiddleware = async (req, res, next) => {
     const userAgent = req.headers['user-agent'] || '';
     const clientIP = getClientIP(req);
     const slug = req.params.slug;
+    const referer = req.headers['referer'] || req.headers['referrer'] || '';
     
     // Ghi log để debug
     console.log(`📍 Request: /${slug} | IP: ${clientIP} | UA: ${userAgent.substring(0, 50)}...`);
     
-    // Kiểm tra nếu là bot preview
+    // === BƯỚC 1: Kiểm tra Bot Preview ===
     if (isPreviewBot(userAgent)) {
-        console.log(`🤖 Bot detected: ${userAgent.substring(0, 30)}...`);
+        console.log(`🤖 Bot preview detected: ${userAgent.substring(0, 30)}...`);
         
-        // Đánh dấu là bot để xử lý ở route
         req.isPreviewBot = true;
         req.botType = PREVIEW_BOTS.find(bot => userAgent.toLowerCase().includes(bot)) || 'unknown';
+        req.clientIP = clientIP;
         
         return next();
     }
     
-    // Người dùng thực - kiểm tra rate limiting
+    // === BƯỚC 2: Rate Limiting ===
     const rateLimited = await isRateLimited(clientIP, slug);
     if (rateLimited) {
         console.log(`⚠️ Rate limited: ${clientIP}`);
@@ -192,12 +223,35 @@ const smartRoutingMiddleware = async (req, res, next) => {
         });
     }
     
-    // Lưu tracking visit
-    await trackVisit(clientIP, slug);
+    // === BƯỚC 3: Kiểm tra IP qua IP2Location (sample.bin.db11) ===
+    const ipAnalysis = analyzeIP(clientIP);
     
-    // Đánh dấu là người dùng thực
+    // Click hợp lệ = Từ VN + Không phải datacenter/bot
+    const isValidClick = !ipAnalysis.isBot;
+    
+    // Log kết quả
+    const logIcon = isValidClick ? '✅' : '⚠️';
+    console.log(`${logIcon} IP Check: ${clientIP} | Valid: ${isValidClick} | Country: ${ipAnalysis.details.countryShort} | ISP: ${ipAnalysis.details.isp}`);
+    
+    // === BƯỚC 4: Gắn thông tin vào request ===
     req.isPreviewBot = false;
     req.clientIP = clientIP;
+    req.userAgent = userAgent;
+    req.referer = referer;
+    req.deviceType = getDeviceType(userAgent);
+    
+    // Thông tin IP analysis cho route lưu MongoDB
+    req.ipAnalysis = ipAnalysis;
+    req.isValidClick = isValidClick;
+    req.ipInfo = {
+        countryShort: ipAnalysis.details.countryShort,
+        isp: ipAnalysis.details.isp,
+        region: ipAnalysis.details.region || '',
+        city: ipAnalysis.details.city || ''
+    };
+    
+    // === BƯỚC 5: Track vào Redis (backup) ===
+    await trackVisitRedis(clientIP, slug, isValidClick);
     
     next();
 };
@@ -206,7 +260,9 @@ module.exports = {
     smartRoutingMiddleware,
     isPreviewBot,
     getClientIP,
-    trackVisit,
+    getDeviceType,
+    isRateLimited,
     getClickCount,
-    isRateLimited
+    trackVisitRedis,
+    PREVIEW_BOTS
 };

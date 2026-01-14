@@ -3,9 +3,11 @@
  * 
  * Form để tạo/chỉnh sửa link
  * Sử dụng Ant Design Form với validation
+ * - Slug tự động tạo từ tiêu đề (VD: "Đánh ghen ở TP Vinh" → "danh-ghen-o-thanh-pho-vinh")
+ * - Drag & drop ảnh
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
     Modal, 
     Form, 
@@ -14,20 +16,72 @@ import {
     Space,
     Typography,
     Divider,
-    Image
+    Image,
+    Upload,
+    message,
+    Spin
 } from 'antd';
 import { 
     LinkOutlined, 
     PictureOutlined, 
     TagOutlined,
-    ShopOutlined
+    ShopOutlined,
+    CloudUploadOutlined,
+    DeleteOutlined
 } from '@ant-design/icons';
 
 const { Text } = Typography;
 const { TextArea } = Input;
 
+/**
+ * Hàm chuyển đổi tiêu đề thành slug
+ * VD: "Đánh ghen ở thành phố Vinh" → "danh-ghen-o-thanh-pho-vinh"
+ */
+const titleToSlug = (title) => {
+    if (!title) return '';
+    
+    const vietnameseMap = {
+        'á': 'a', 'à': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a',
+        'ă': 'a', 'ắ': 'a', 'ằ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
+        'â': 'a', 'ấ': 'a', 'ầ': 'a', 'ẩ': 'a', 'ẫ': 'a', 'ậ': 'a',
+        'é': 'e', 'è': 'e', 'ẻ': 'e', 'ẽ': 'e', 'ẹ': 'e',
+        'ê': 'e', 'ế': 'e', 'ề': 'e', 'ể': 'e', 'ễ': 'e', 'ệ': 'e',
+        'í': 'i', 'ì': 'i', 'ỉ': 'i', 'ĩ': 'i', 'ị': 'i',
+        'ó': 'o', 'ò': 'o', 'ỏ': 'o', 'õ': 'o', 'ọ': 'o',
+        'ô': 'o', 'ố': 'o', 'ồ': 'o', 'ổ': 'o', 'ỗ': 'o', 'ộ': 'o',
+        'ơ': 'o', 'ớ': 'o', 'ờ': 'o', 'ở': 'o', 'ỡ': 'o', 'ợ': 'o',
+        'ú': 'u', 'ù': 'u', 'ủ': 'u', 'ũ': 'u', 'ụ': 'u',
+        'ư': 'u', 'ứ': 'u', 'ừ': 'u', 'ử': 'u', 'ữ': 'u', 'ự': 'u',
+        'ý': 'y', 'ỳ': 'y', 'ỷ': 'y', 'ỹ': 'y', 'ỵ': 'y',
+        'đ': 'd'
+    };
+
+    let slug = title.toLowerCase();
+    
+    // Thay thế ký tự tiếng Việt
+    for (let char in vietnameseMap) {
+        slug = slug.replace(new RegExp(char, 'g'), vietnameseMap[char]);
+    }
+    
+    // Loại bỏ emoji và ký tự đặc biệt
+    slug = slug.replace(/[^\w\s-]/g, '');
+    
+    // Thay thế khoảng trắng bằng dấu gạch ngang
+    slug = slug.trim().replace(/\s+/g, '-');
+    
+    // Loại bỏ dấu gạch ngang liên tiếp
+    slug = slug.replace(/-+/g, '-');
+    
+    // Giới hạn độ dài
+    slug = slug.slice(0, 50);
+    
+    return slug;
+};
+
 const LinkForm = ({ visible, onCancel, onSubmit, editingLink, loading }) => {
     const [form] = Form.useForm();
+    const [imageLoading, setImageLoading] = useState(false);
+    const [previewImage, setPreviewImage] = useState(null);
 
     // Reset form khi mở/đóng modal hoặc thay đổi editingLink
     useEffect(() => {
@@ -40,12 +94,54 @@ const LinkForm = ({ visible, onCancel, onSubmit, editingLink, loading }) => {
                     imageUrl: editingLink.imageUrl,
                     customSlug: editingLink.slug
                 });
+                setPreviewImage(editingLink.imageUrl);
             } else {
                 // Chế độ tạo mới - reset form
                 form.resetFields();
+                setPreviewImage(null);
             }
         }
     }, [visible, editingLink, form]);
+
+    /**
+     * Xử lý thay đổi tiêu đề - auto-generate slug
+     */
+    const handleTitleChange = (e) => {
+        const title = e.target.value;
+        const generatedSlug = titleToSlug(title);
+        form.setFieldValue('customSlug', generatedSlug);
+    };
+
+    /**
+     * Xử lý upload/drop ảnh
+     */
+    const handleImageUpload = async (info) => {
+        const file = info.file;
+
+        if (file.status === 'uploading') {
+            setImageLoading(true);
+            return;
+        }
+
+        // Đọc file và convert sang base64 hoặc upload lên server
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const imageDataUrl = e.target.result;
+            setPreviewImage(imageDataUrl);
+            form.setFieldValue('imageUrl', imageDataUrl);
+            setImageLoading(false);
+            message.success('Ảnh đã được tải lên!');
+        };
+        reader.readAsDataURL(file);
+    };
+
+    /**
+     * Xóa ảnh đã chọn
+     */
+    const handleRemoveImage = () => {
+        setPreviewImage(null);
+        form.setFieldValue('imageUrl', '');
+    };
 
     /**
      * Xử lý submit form
@@ -55,15 +151,11 @@ const LinkForm = ({ visible, onCancel, onSubmit, editingLink, loading }) => {
             const values = await form.validateFields();
             await onSubmit(values);
             form.resetFields();
+            setPreviewImage(null);
         } catch (error) {
             console.error('Validation failed:', error);
         }
     };
-
-    /**
-     * Preview ảnh trong form
-     */
-    const imageUrl = Form.useWatch('imageUrl', form);
 
     return (
         <Modal
@@ -77,7 +169,7 @@ const LinkForm = ({ visible, onCancel, onSubmit, editingLink, loading }) => {
             onCancel={onCancel}
             footer={null}
             width={600}
-            destroyOnClose
+            destroyOnHidden
         >
             <Divider />
             
@@ -100,10 +192,16 @@ const LinkForm = ({ visible, onCancel, onSubmit, editingLink, loading }) => {
                         { required: true, message: 'Vui lòng nhập tiêu đề' },
                         { max: 100, message: 'Tiêu đề tối đa 100 ký tự' }
                     ]}
+                    extra={
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            ℹ️ Slug sẽ tự động tạo từ tiêu đề (VD: "Đánh ghen ở TP Vinh" → "danh-ghen-o-thanh-pho-vinh")
+                        </Text>
+                    }
                 >
                     <Input 
                         placeholder="VD: 🔥 Flash Sale - Giảm 50% Hôm Nay!"
                         size="large"
+                        onChange={handleTitleChange}
                     />
                 </Form.Item>
 
@@ -139,73 +237,107 @@ const LinkForm = ({ visible, onCancel, onSubmit, editingLink, loading }) => {
                     label={
                         <Space>
                             <PictureOutlined />
-                            <span>Link ảnh Preview</span>
+                            <span>Ảnh Preview (Drag & Drop hoặc Upload)</span>
                         </Space>
                     }
                     rules={[
-                        { required: true, message: 'Vui lòng nhập URL ảnh' },
-                        { type: 'url', message: 'URL ảnh không hợp lệ' }
+                        { required: true, message: 'Vui lòng tải lên ảnh' }
                     ]}
                     extra={
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                            Ảnh sẽ hiển thị khi share link lên Facebook, Zalo... Kích thước đề xuất: 1200x630px
+                            📸 Ảnh sẽ hiển thị khi share link lên Facebook, Zalo... Kích thước đề xuất: 1200x630px
                         </Text>
                     }
                 >
-                    <Input 
-                        placeholder="https://cf.shopee.vn/file/..."
-                        size="large"
-                    />
+                    <Upload.Dragger
+                        name="image"
+                        accept="image/*"
+                        maxCount={1}
+                        beforeUpload={() => false}
+                        onChange={handleImageUpload}
+                        showUploadList={false}
+                        style={{
+                            borderRadius: 8,
+                            padding: '20px',
+                            transition: 'all 0.3s'
+                        }}
+                    >
+                        <Spin spinning={imageLoading}>
+                            <Space direction="vertical" style={{ width: '100%', textAlign: 'center' }}>
+                                <CloudUploadOutlined style={{ fontSize: 32, color: '#EE4D2D' }} />
+                                <Text strong>Kéo ảnh vào đây hoặc click để chọn</Text>
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    Hỗ trợ: JPG, PNG, GIF (Tối đa 10MB)
+                                </Text>
+                            </Space>
+                        </Spin>
+                    </Upload.Dragger>
                 </Form.Item>
 
                 {/* Preview ảnh */}
-                {imageUrl && (
+                {previewImage && (
                     <Form.Item label="Xem trước ảnh">
                         <div style={{
-                            border: '1px solid #f0f0f0',
+                            border: '2px solid #EE4D2D',
                             borderRadius: 8,
-                            padding: 8,
-                            background: '#fafafa'
+                            padding: 16,
+                            background: '#fafafa',
+                            position: 'relative'
                         }}>
                             <Image
-                                src={imageUrl}
+                                src={previewImage}
                                 alt="Preview"
                                 style={{ 
                                     maxWidth: '100%', 
-                                    maxHeight: 200,
+                                    maxHeight: 250,
                                     borderRadius: 4
                                 }}
-                                fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAADDCAYAAADQvc6UAAABRWlDQ1BJQ0MgUHJvZmlsZQAAKJFjYGASSSwoyGFhYGDIzSspCnJ3UoiIjFJgf8LAwSDCIMogwMCcmFxc4BgQ4ANUwgCjUcG3awyMIPqyLsis7PPOq3QdDFcvjV3jOD1boQVTPQrgSkktTgbSf4A4LbmgqISBgTEFyFYuLykAsTuAbJEioKOA7DkgdjqEvQHEToKwj4DVhAQ5A9k3gGyB5IxEoBmML4BsnSQk8XQkNtReEOBxcfXxUQg1Mjc0dyHgXNJBSWpFCYh2zi+oLMpMzyhRcASGUqqCZ16yno6CkYGRAQMDKMwhqj/fAIcloxgHQqxAjIHBEugw5sUIsSQpBobtQPdLciLEVJYzMPBHMDBsayhILEqEO4DxG0txmrERhM29nYGBddr//5/DGRjYNRkY/l7////39v///y4Dmn+LgesAH/0AAAA6ZVhJZk1NACoAAAAIAAAAAAAAA/9AAAAASUVORK5CYII="
+                                preview={{
+                                    mask: 'Xem'
+                                }}
                             />
+                            <Button
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={handleRemoveImage}
+                                style={{
+                                    position: 'absolute',
+                                    top: 8,
+                                    right: 8,
+                                    background: 'rgba(255,255,255,0.9)'
+                                }}
+                            >
+                                Xóa
+                            </Button>
                         </div>
                     </Form.Item>
                 )}
 
-                {/* Custom Slug (chỉ khi tạo mới) */}
-                {!editingLink && (
-                    <Form.Item
-                        name="customSlug"
-                        label="Slug tùy chỉnh (không bắt buộc)"
-                        rules={[
-                            { 
-                                pattern: /^[a-zA-Z0-9_-]*$/, 
-                                message: 'Slug chỉ chứa chữ, số, dấu gạch ngang và gạch dưới' 
-                            },
-                            { max: 20, message: 'Slug tối đa 20 ký tự' }
-                        ]}
-                        extra={
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                                Để trống sẽ tự động tạo slug ngẫu nhiên. VD: flash50, deal-hot
-                            </Text>
-                        }
-                    >
-                        <Input 
-                            placeholder="VD: flash50"
-                            size="large"
-                            addonBefore="/"
-                        />
-                    </Form.Item>
-                )}
+                {/* Custom Slug - Auto-generated từ tiêu đề */}
+                <Form.Item
+                    name="customSlug"
+                    label="Slug (tự động tạo từ tiêu đề)"
+                    rules={[
+                        { 
+                            pattern: /^[a-zA-Z0-9_-]*$/, 
+                            message: 'Slug chỉ chứa chữ, số, dấu gạch ngang và gạch dưới' 
+                        },
+                        { max: 50, message: 'Slug tối đa 50 ký tự' }
+                    ]}
+                    extra={
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            🔗 Tự động tạo từ tiêu đề. Bạn có thể chỉnh sửa nếu cần.
+                        </Text>
+                    }
+                >
+                    <Input 
+                        placeholder="danh-ghen-o-thanh-pho-vinh"
+                        size="large"
+                        disabled={editingLink}
+                        addonBefore={<span style={{ color: '#999' }}>/</span>}
+                    />
+                </Form.Item>
 
                 <Divider />
 

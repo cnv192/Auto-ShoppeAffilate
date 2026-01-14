@@ -121,4 +121,97 @@ router.post('/ip/batch-lookup', (req, res) => {
     });
 });
 
+/**
+ * POST /api/debug/facebook/test-crawler
+ * Test Facebook crawler với cookie
+ */
+router.post('/facebook/test-crawler', async (req, res) => {
+    const { cookie, targetUrl } = req.body;
+    
+    if (!cookie) {
+        return res.status(400).json({
+            success: false,
+            error: 'Please provide Facebook cookie'
+        });
+    }
+    
+    try {
+        // Import automation service
+        const { CampaignAutomationService } = require('../services/facebookAutomationService');
+        const automationService = new CampaignAutomationService();
+        
+        // Determine what to crawl
+        let result;
+        if (targetUrl) {
+            if (targetUrl.includes('/groups/')) {
+                result = await automationService.crawlGroupPosts(targetUrl, cookie);
+            } else if (targetUrl.includes('facebook.com/')) {
+                result = await automationService.crawlPagePosts(targetUrl, cookie);
+            } else {
+                result = [];
+            }
+        } else {
+            // Default: crawl News Feed
+            result = await automationService.crawlNewsFeed(cookie, 10);
+        }
+        
+        res.json({
+            success: true,
+            data: {
+                targetUrl: targetUrl || 'News Feed',
+                postsFound: result.length,
+                postIds: result
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/debug/facebook/resolve-url
+ * Test URL resolution for /share/p/ format
+ */
+router.post('/facebook/resolve-url', async (req, res) => {
+    const { url, cookie } = req.body;
+    
+    if (!url) {
+        return res.status(400).json({
+            success: false,
+            error: 'Please provide Facebook URL'
+        });
+    }
+    
+    try {
+        // Import functions
+        const { extractPostIdSync, resolveShareUrl, extractPostIdAsync } = require('../services/facebookAutomationService');
+        
+        // Try sync first
+        const syncResult = extractPostIdSync(url);
+        
+        let asyncResult = null;
+        if (!syncResult && url.includes('/share/p/')) {
+            asyncResult = await resolveShareUrl(url, cookie || '');
+        }
+        
+        res.json({
+            success: true,
+            data: {
+                inputUrl: url,
+                syncResult: syncResult,
+                asyncResult: asyncResult,
+                finalPostId: syncResult || asyncResult
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;

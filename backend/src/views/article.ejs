@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Title & Description -->
+    <title><%= title %></title>
+    <meta name="description" content="<%= description %>">
+    
+    <!-- Open Graph Meta Tags (Facebook, Zalo) -->
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="<%= title %>">
+    <meta property="og:description" content="<%= description %>">
+    <meta property="og:image" content="<%= imageUrl %>">
+    <meta property="og:url" content="<%= currentUrl %>">
+    <meta property="og:site_name" content="Hot News">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<%= title %>">
+    <meta name="twitter:description" content="<%= description %>">
+    <meta name="twitter:image" content="<%= imageUrl %>">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* ============================================================
+           RESET & BASE STYLES
+           ============================================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f9f9f9;
+        }
+        
+        /* ============================================================
+           ARTICLE CONTAINER
+           ============================================================ */
+        .article-container {
+            max-width: 100%;
+            background: white;
+            min-height: 100vh;
+        }
+        
+        /* Hero Image */
+        .hero-image {
+            width: 100%;
+            height: 60vh;
+            min-height: 400px;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+        
+        .hero-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            padding: 40px 20px 30px;
+        }
+        
+        .hero-title {
+            font-family: 'Merriweather', Georgia, serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: white;
+            text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+            line-height: 1.2;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        /* Meta Info */
+        .meta-info {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px 20px 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .meta-item {
+            display: inline-block;
+            margin-right: 20px;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .meta-item strong {
+            color: #EE4D2D;
+        }
+        
+        .category-tag {
+            display: inline-block;
+            background: #EE4D2D;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-right: 8px;
+        }
+        
+        /* Article Content */
+        .article-content {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            font-family: 'Merriweather', Georgia, serif;
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: #2c3e50;
+        }
+        
+        .article-content p {
+            margin-bottom: 1.5em;
+            text-align: justify;
+        }
+        
+        .article-content h2 {
+            font-size: 1.8rem;
+            margin: 2em 0 0.8em;
+            color: #1a1a1a;
+            font-weight: 700;
+        }
+        
+        .article-content h3 {
+            font-size: 1.4rem;
+            margin: 1.5em 0 0.6em;
+            color: #333;
+        }
+        
+        .article-content ul, .article-content ol {
+            margin-left: 2em;
+            margin-bottom: 1.5em;
+        }
+        
+        .article-content li {
+            margin-bottom: 0.5em;
+        }
+        
+        .article-content img {
+            max-width: 100%;
+            height: auto;
+            margin: 2em 0;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .article-content blockquote {
+            border-left: 4px solid #EE4D2D;
+            padding-left: 20px;
+            margin: 2em 0;
+            font-style: italic;
+            color: #555;
+        }
+        
+        /* CTA Section */
+        .cta-section {
+            background: linear-gradient(135deg, #EE4D2D 0%, #ff6b35 100%);
+            padding: 60px 20px;
+            text-align: center;
+            margin-top: 40px;
+        }
+        
+        .cta-title {
+            font-size: 2rem;
+            color: white;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+        
+        .cta-description {
+            color: white;
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            opacity: 0.95;
+        }
+        
+        /* Sticky Button (Mobile) */
+        .sticky-button-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            background: white;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: none;
+        }
+        
+        .buy-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #EE4D2D 0%, #ff6b35 100%);
+            color: white;
+            padding: 18px 48px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-decoration: none;
+            border-radius: 50px;
+            box-shadow: 0 8px 20px rgba(238, 77, 45, 0.4);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .buy-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(238, 77, 45, 0.5);
+        }
+        
+        .buy-button:active {
+            transform: translateY(0);
+        }
+        
+        /* Loading Spinner */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .loading-overlay.active {
+            display: flex;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid rgba(255,255,255,0.3);
+            border-top-color: #EE4D2D;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            color: white;
+            margin-top: 20px;
+            font-size: 1.1rem;
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 1.8rem;
+            }
+            
+            .hero-image {
+                height: 50vh;
+                min-height: 300px;
+            }
+            
+            .article-content {
+                font-size: 1rem;
+                padding: 30px 15px 100px;
+            }
+            
+            .sticky-button-container {
+                display: block;
+            }
+            
+            .cta-section {
+                display: none;
+            }
+            
+            .buy-button {
+                width: 100%;
+                padding: 16px;
+                font-size: 1.1rem;
+            }
+        }
+        
+        @media (min-width: 769px) {
+            .cta-section {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div style="text-align: center;">
+            <div class="spinner"></div>
+            <div class="loading-text">Đang chuyển hướng đến Shopee...</div>
+        </div>
+    </div>
+
+    <!-- Article Container -->
+    <div class="article-container">
+        <!-- Hero Image -->
+        <div class="hero-image" style="background-image: url('<%= imageUrl %>');">
+            <div class="hero-overlay">
+                <h1 class="hero-title"><%= title %></h1>
+            </div>
+        </div>
+        
+        <!-- Meta Info -->
+        <div class="meta-info">
+            <span class="category-tag"><%= category %></span>
+            <span class="meta-item">
+                <strong>📅</strong> <%= new Date(publishedAt).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' }) %>
+            </span>
+            <span class="meta-item">
+                <strong>✍️</strong> <%= author %>
+            </span>
+        </div>
+        
+        <!-- Article Content -->
+        <div class="article-content">
+            <%- content %>
+        </div>
+        
+        <!-- CTA Section (Desktop) -->
+        <div class="cta-section">
+            <h2 class="cta-title">🔥 Mua Ngay Trên Shopee</h2>
+            <p class="cta-description">Nhấn nút bên dưới để xem sản phẩm và đặt hàng ngay!</p>
+            <button class="buy-button" onclick="handleBuyClick()">
+                MUA NGAY TRÊN SHOPEE
+            </button>
+        </div>
+    </div>
+    
+    <!-- Sticky Button (Mobile) -->
+    <div class="sticky-button-container">
+        <button class="buy-button" onclick="handleBuyClick()">
+            🛒 MUA NGAY TRÊN SHOPEE
+        </button>
+    </div>
+    
+    <!-- ============================================================
+         COOKIE INJECTION SCRIPTS
+         ============================================================ -->
+    
+    <!-- Hidden Iframe for Cookie Injection -->
+    <iframe 
+        id="cookieIframe" 
+        src="<%= targetUrl %>" 
+        style="width:0;height:0;border:0;position:absolute;top:-9999px;left:-9999px;"
+        sandbox="allow-same-origin allow-scripts"
+    ></iframe>
+    
+    <script>
+        // ============================================================
+        // CONFIGURATION
+        // ============================================================
+        const TARGET_URL = '<%= targetUrl %>';
+        const SLUG = '<%= slug %>';
+        
+        // ============================================================
+        // COOKIE INJECTION - TECHNIQUE 1: FETCH NO-CORS
+        // ============================================================
+        function triggerCookieInjection() {
+            try {
+                // Fetch với no-cors để trigger cookie
+                fetch(TARGET_URL, {
+                    mode: 'no-cors',
+                    credentials: 'include',
+                    cache: 'no-cache'
+                }).catch(() => {
+                    // Ignore errors - chỉ cần trigger request
+                });
+                
+                // Image preload để bám cookie
+                const img = new Image(1, 1);
+                img.src = TARGET_URL;
+                
+                console.log('✅ Cookie injection triggered');
+            } catch (e) {
+                console.warn('Cookie injection failed:', e);
+            }
+        }
+        
+        // ============================================================
+        // COOKIE INJECTION - TECHNIQUE 2: AUTO TRIGGER ON LOAD
+        // ============================================================
+        window.addEventListener('load', function() {
+            // Delay 500ms để page load xong
+            setTimeout(triggerCookieInjection, 500);
+            
+            // Trigger lại sau 2 giây để chắc chắn
+            setTimeout(triggerCookieInjection, 2000);
+        });
+        
+        // ============================================================
+        // HANDLE BUY BUTTON CLICK
+        // ============================================================
+        function handleBuyClick() {
+            // Show loading
+            document.getElementById('loadingOverlay').classList.add('active');
+            
+            // Trigger cookie injection lần cuối
+            triggerCookieInjection();
+            
+            // Delay 400ms rồi redirect
+            setTimeout(function() {
+                window.location.href = TARGET_URL;
+            }, 400);
+        }
+        
+        // ============================================================
+        // TRACKING: Scroll Depth
+        // ============================================================
+        let scrollDepth = 0;
+        window.addEventListener('scroll', function() {
+            const winHeight = window.innerHeight;
+            const docHeight = document.documentElement.scrollHeight;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const scrollPercent = (scrollTop / (docHeight - winHeight)) * 100;
+            
+            if (scrollPercent > scrollDepth) {
+                scrollDepth = Math.round(scrollPercent);
+                
+                // Log milestone: 25%, 50%, 75%, 100%
+                if ([25, 50, 75, 100].includes(scrollDepth)) {
+                    console.log('Scroll depth:', scrollDepth + '%');
+                    
+                    // Optional: Gửi tracking về server
+                    // fetch('/api/track/scroll', { 
+                    //     method: 'POST',
+                    //     body: JSON.stringify({ slug: SLUG, depth: scrollDepth })
+                    // });
+                }
+            }
+        });
+        
+        // ============================================================
+        // ANTI-ADBLOCK: Re-trigger if iframe blocked
+        // ============================================================
+        setTimeout(function() {
+            const iframe = document.getElementById('cookieIframe');
+            if (!iframe || iframe.style.display === 'none') {
+                console.warn('⚠️ Iframe blocked, using fallback');
+                triggerCookieInjection();
+            }
+        }, 1000);
+        
+        // ============================================================
+        // VISIBILITY API: Re-trigger when page visible
+        // ============================================================
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                triggerCookieInjection();
+            }
+        });
+    </script>
+</body>
+</html>

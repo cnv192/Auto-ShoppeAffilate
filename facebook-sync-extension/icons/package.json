@@ -1,0 +1,15 @@
+{
+  "name": "icons",
+  "version": "1.0.0",
+  "description": "Bạn cần tạo 3 file icon PNG với kích thước sau: - icon16.png (16x16 pixels) - icon48.png (48x48 pixels)   - icon128.png (128x128 pixels)",
+  "main": "create-icons.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "canvas": "^3.2.1"
+  }
+}

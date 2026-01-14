@@ -13,12 +13,15 @@ import {
     FireOutlined
 } from '@ant-design/icons';
 
-const StatsCards = ({ links }) => {
+const StatsCards = ({ links = [] }) => {
+    // Ensure links is an array
+    const linksArray = Array.isArray(links) ? links : [];
+    
     // Tính toán thống kê
-    const totalLinks = links.length;
-    const totalClicks = links.reduce((sum, link) => sum + (link.clicks || 0), 0);
-    const activeLinks = links.filter(link => link.isActive).length;
-    const topLink = links.reduce((max, link) => 
+    const totalLinks = linksArray.length;
+    const totalClicks = linksArray.reduce((sum, link) => sum + (link.clicks || 0), 0);
+    const activeLinks = linksArray.filter(link => link.isActive).length;
+    const topLink = linksArray.reduce((max, link) => 
         (link.clicks || 0) > (max.clicks || 0) ? link : max, 
         { clicks: 0 }
     );
@@ -31,7 +34,7 @@ const StatsCards = ({ links }) => {
     return (
         <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col xs={24} sm={12} lg={6}>
-                <Card style={cardStyle} bordered={false}>
+                <Card style={cardStyle} variant="borderless">
                     <Statistic
                         title="Tổng số Link"
                         value={totalLinks}
@@ -42,7 +45,7 @@ const StatsCards = ({ links }) => {
             </Col>
             
             <Col xs={24} sm={12} lg={6}>
-                <Card style={cardStyle} bordered={false}>
+                <Card style={cardStyle} variant="borderless">
                     <Statistic
                         title="Tổng Clicks"
                         value={totalClicks}
@@ -53,7 +56,7 @@ const StatsCards = ({ links }) => {
             </Col>
             
             <Col xs={24} sm={12} lg={6}>
-                <Card style={cardStyle} bordered={false}>
+                <Card style={cardStyle} variant="borderless">
                     <Statistic
                         title="Link Hoạt động"
                         value={activeLinks}
@@ -65,7 +68,7 @@ const StatsCards = ({ links }) => {
             </Col>
             
             <Col xs={24} sm={12} lg={6}>
-                <Card style={cardStyle} bordered={false}>
+                <Card style={cardStyle} variant="borderless">
                     <Statistic
                         title="Link Hot nhất"
                         value={topLink.clicks || 0}

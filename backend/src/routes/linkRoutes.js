@@ -1,25 +1,71 @@
 /**
  * Link Routes
  * 
- * Định nghĩa các API endpoints cho việc quản lý links
+ * API endpoints cho việc quản lý links với MongoDB
+ * - Admin: Xem tất cả links với thông tin user sở hữu
+ * - User: Chỉ xem links của mình
  */
 
 const express = require('express');
 const router = express.Router();
-const linkService = require('../services/linkService');
+const linkService = require('../services/linkServiceMongo');
 const { getClickCount } = require('../middleware/smartRouting');
+const { authenticate, optionalAuthenticate } = require('../middleware/auth');
+const Link = require('../models/Link');
 
 /**
  * GET /api/links
  * Lấy danh sách tất cả links
+ * - Admin: Xem tất cả + populate userId
+ * - User: Chỉ xem của mình
  */
-router.get('/', async (req, res) => {
+router.get('/', optionalAuthenticate, async (req, res) => {
     try {
-        const links = await linkService.getAllLinks();
+        const user = req.user;
+        let query = { isActive: true };
+        
+        // User chỉ xem links của mình
+        if (user && user.role !== 'admin') {
+            query.userId = user._id;
+        }
+        
+        // Query với populate userId cho admin
+        let links;
+        if (user?.role === 'admin') {
+            links = await Link.find(query)
+                .populate('userId', 'username displayName avatar')
+                .sort('-createdAt')
+                .select('-clickLogs -clickedIPs');
+        } else {
+            links = await linkService.getAllLinks();
+        }
+        
+        // Format response để tương thích với frontend
+        const formattedLinks = links.map(link => ({
+            id: link._id,
+            slug: link.slug,
+            title: link.title,
+            targetUrl: link.targetUrl,
+            imageUrl: link.imageUrl,
+            clicks: link.validClicks || 0,
+            totalClicks: link.totalClicks || 0,
+            uniqueIPs: link.uniqueIPs || 0,
+            isActive: link.isActive,
+            createdAt: link.createdAt,
+            updatedAt: link.updatedAt,
+            // Thêm userId cho admin view
+            userId: link.userId ? {
+                _id: link.userId._id,
+                username: link.userId.username,
+                displayName: link.userId.displayName,
+                avatar: link.userId.avatar
+            } : null
+        }));
+        
         res.json({
             success: true,
-            data: links,
-            total: links.length
+            data: formattedLinks,
+            total: formattedLinks.length
         });
     } catch (error) {
         console.error('Error getting links:', error);
@@ -48,7 +94,19 @@ router.get('/:slug', async (req, res) => {
         
         res.json({
             success: true,
-            data: link
+            data: {
+                id: link._id,
+                slug: link.slug,
+                title: link.title,
+                targetUrl: link.targetUrl,
+                imageUrl: link.imageUrl,
+                clicks: link.validClicks,
+                totalClicks: link.totalClicks,
+                invalidClicks: link.invalidClicks,
+                uniqueIPs: link.uniqueIPs,
+                isActive: link.isActive,
+                createdAt: link.createdAt
+            }
         });
     } catch (error) {
         console.error('Error getting link:', error);
