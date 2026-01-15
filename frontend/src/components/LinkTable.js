@@ -25,6 +25,7 @@ import {
     Col,
     Avatar
 } from 'antd';
+import dayjs from 'dayjs';
 import { 
     EditOutlined, 
     DeleteOutlined, 
@@ -212,12 +213,11 @@ const LinkTable = ({ links, loading, onEdit, onDelete, onRefresh }) => {
                     <Space size={4}>
                         <Avatar 
                             size="small" 
-                            src={userId.avatar}
                             icon={<UserOutlined />}
                             style={{ backgroundColor: '#EE4D2D' }}
                         />
                         <Text ellipsis style={{ maxWidth: 80 }}>
-                            {userId.username || userId.displayName || 'Unknown'}
+                            {userId.fullName || userId.username || 'Unknown'}
                         </Text>
                     </Space>
                 );
@@ -240,6 +240,18 @@ const LinkTable = ({ links, loading, onEdit, onDelete, onRefresh }) => {
                 >
                     {isActive ? 'Hoạt động' : 'Ngưng'}
                 </Tag>
+            )
+        },
+        {
+            title: 'Ngày tạo',
+            dataIndex: 'createdAt',
+            key: 'createdAt',
+            width: 120,
+            sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+            render: (createdAt) => (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                    {dayjs(createdAt).format('HH:mm DD/MM/YYYY')}
+                </Text>
             )
         },
         {

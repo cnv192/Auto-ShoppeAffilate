@@ -248,20 +248,44 @@ router.post('/', authenticate, async (req, res) => {
  */
 router.get('/', authenticate, async (req, res) => {
     try {
-        const { status, page = 1, limit = 20 } = req.query;
+        const { status, page = 1, limit = 20, userId: queryUserId } = req.query;
         
-        // Admin có thể xem tất cả, User chỉ xem của mình
-        const userId = req.userRole === 'admin' ? req.query.userId : req.userId;
+        const query = {};
         
-        const result = await Campaign.getCampaignsByUser(userId, {
-            status,
-            page: parseInt(page),
-            limit: parseInt(limit)
-        });
+        if (status) {
+            query.status = status;
+        }
+
+        // If the user is an admin, they can filter by userId.
+        // If not, they can only see their own campaigns.
+        if (req.user.role === 'admin') {
+            if (queryUserId) {
+                query.userId = queryUserId;
+            }
+        } else {
+            query.userId = req.user._id;
+        }
+        
+        const pageInt = parseInt(page);
+        const limitInt = parseInt(limit);
+
+        const totalDocs = await Campaign.countDocuments(query);
+        const campaigns = await Campaign.find(query)
+            .sort({ createdAt: -1 })
+            .skip((pageInt - 1) * limitInt)
+            .limit(limitInt)
+            .populate('facebookAccountId', 'name profileUrl')
+            .populate('userId', 'username fullName');
         
         return res.json({
             success: true,
-            data: result
+            data: {
+                campaigns: campaigns,
+                total: totalDocs,
+                page: pageInt,
+                pages: Math.ceil(totalDocs / limitInt),
+                limit: limitInt,
+            }
         });
         
     } catch (error) {

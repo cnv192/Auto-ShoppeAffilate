@@ -255,9 +255,50 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
             isActive: isActive !== undefined ? isActive === 'true' : undefined
         });
         
+        // Lấy thống kê thực tế cho mỗi user
+        const Link = require('../models/Link');
+        const Campaign = require('../models/Campaign');
+        
+        const usersWithStats = await Promise.all(result.users.map(async (user) => {
+            const userObj = user.toObject();
+            
+            // Đếm số links và campaigns thực tế
+            const [linksCount, campaignsCount, linksStats] = await Promise.all([
+                Link.countDocuments({ userId: user._id }),
+                Campaign.countDocuments({ userId: user._id }),
+                Link.aggregate([
+                    { $match: { userId: user._id } },
+                    { 
+                        $group: { 
+                            _id: null, 
+                            totalClicks: { $sum: '$totalClicks' },
+                            validClicks: { $sum: '$validClicks' }
+                        } 
+                    }
+                ])
+            ]);
+            
+            const clickStats = linksStats[0] || { totalClicks: 0, validClicks: 0 };
+            
+            // Cập nhật stats object
+            userObj.stats = {
+                linksCreated: linksCount,
+                campaignsCreated: campaignsCount,
+                totalClicks: clickStats.totalClicks,
+                validClicks: clickStats.validClicks
+            };
+            
+            return userObj;
+        }));
+        
         return res.json({
             success: true,
-            data: result
+            data: {
+                users: usersWithStats,
+                total: result.total,
+                page: result.page,
+                pages: result.pages
+            }
         });
         
     } catch (error) {

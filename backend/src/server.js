@@ -82,13 +82,11 @@ app.use(ipFilterMiddleware({
     pageType: 'news'                                     // Hiển thị trang tin tức cho bot
 }));
 
-// View Engine - EJS cho rendering HTML
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-
-// Static files - Serve uploaded images
+// Static files - Serve uploaded images & frontend build
 app.use('/static', express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve frontend build static files (CSS, JS, etc)
+app.use(express.static(path.join(__dirname, '../../frontend/build')));
 
 // =================================================================
 // ROUTES
@@ -126,6 +124,10 @@ app.use('/api/facebook-accounts', facebookAccountRoutes);
 // Resource Set Routes - Quản lý tập hợp tài nguyên (templates, groups, pages)
 app.use('/api/resource-sets', resourceSetRoutes);
 
+// Banner Routes - Quản lý banner quảng cáo
+const bannerRoutes = require('./routes/bannerRoutes');
+app.use('/api/banners', bannerRoutes);
+
 // Account Sync Routes - Extension bg.js sync endpoint
 const accountRoutes = require('./routes/accountRoutes');
 app.use('/api/accounts', accountRoutes);
@@ -150,21 +152,48 @@ if (process.env.NODE_ENV === 'development') {
 // Redirect Routes - Xử lý redirect (đặt cuối cùng vì có wildcard)
 app.use('/', redirectRoutes);
 
-// 404 Handler
+// 404 Handler - Return JSON for API, serve React for pages
 app.use((req, res) => {
-    res.status(404).render('error', {
-        title: 'Không tìm thấy trang',
-        message: 'Trang bạn tìm kiếm không tồn tại'
-    });
+    // If API request, return JSON error
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({
+            success: false,
+            error: 'Endpoint not found',
+            path: req.path
+        });
+    }
+    
+    // For page requests, let React handle 404
+    const { renderArticle } = require('./controllers/renderController');
+    req.params = { slug: '404' };
+    renderArticle(req, res);
 });
 
-// Error Handler
+// Error Handler - Return JSON for API, serve React for pages
 app.use((err, req, res, next) => {
     console.error('❌ Server Error:', err);
-    res.status(500).render('error', {
-        title: 'Lỗi hệ thống',
-        message: 'Đã xảy ra lỗi, vui lòng thử lại sau'
-    });
+    
+    // If API request, return JSON error
+    if (req.path.startsWith('/api/')) {
+        return res.status(500).json({
+            success: false,
+            error: 'Internal server error',
+            message: process.env.NODE_ENV === 'development' ? err.message : undefined
+        });
+    }
+    
+    // For page requests, send error response
+    res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Lỗi hệ thống</title></head>
+        <body style="font-family:sans-serif;text-align:center;padding:50px;">
+            <h1>⚠️ Đã xảy ra lỗi</h1>
+            <p>Vui lòng thử lại sau</p>
+            <a href="/">Về trang chủ</a>
+        </body>
+        </html>
+    `);
 });
 
 // =================================================================

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 /**
  * Auth Service - Quản lý authentication
@@ -72,7 +72,7 @@ class AuthService {
      */
     async login(username, password) {
         try {
-            const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+            const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
                 username,
                 password
             });
@@ -102,7 +102,7 @@ class AuthService {
      */
     async getMe() {
         try {
-            const response = await axios.get(`${API_BASE_URL}/auth/me`, {
+            const response = await axios.get(`${API_BASE_URL}/api/auth/me`, {
                 headers: this.getAuthHeader()
             });
             
@@ -128,7 +128,7 @@ class AuthService {
      */
     async updateProfile(data) {
         try {
-            const response = await axios.put(`${API_BASE_URL}/auth/me`, data, {
+            const response = await axios.put(`${API_BASE_URL}/api/auth/me`, data, {
                 headers: this.getAuthHeader()
             });
             
@@ -159,7 +159,7 @@ class AuthService {
      */
     getAxiosInstance() {
         return axios.create({
-            baseURL: API_BASE_URL,
+            baseURL: `${API_BASE_URL}/api`,
             headers: this.getAuthHeader()
         });
     }

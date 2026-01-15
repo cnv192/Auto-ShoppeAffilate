@@ -14,33 +14,71 @@ const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const Link = require('../models/Link');
 
 /**
+ * GET /api/links/public
+ * Lấy danh sách tất cả links cho public (không cần đăng nhập)
+ * Dùng cho trang chủ hiển thị bài viết
+ */
+router.get('/public', async (req, res) => {
+    try {
+        const links = await Link.find({ isActive: true })
+            .sort({ publishedAt: -1, createdAt: -1 })
+            .select('slug title description imageUrl category author publishedAt createdAt validClicks totalClicks')
+            .limit(100);
+        
+        const formattedLinks = links.map(link => ({
+            id: link._id,
+            slug: link.slug,
+            title: link.title,
+            description: link.description,
+            imageUrl: link.imageUrl,
+            category: link.category,
+            author: link.author,
+            publishedAt: link.publishedAt,
+            createdAt: link.createdAt,
+            clicks: link.validClicks || 0,
+            clickCount: link.totalClicks || 0
+        }));
+        
+        res.json({
+            success: true,
+            data: formattedLinks
+        });
+    } catch (error) {
+        console.error('Error getting public links:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Không thể tải bài viết'
+        });
+    }
+});
+
+/**
  * GET /api/links
  * Lấy danh sách tất cả links
  * - Admin: Xem tất cả + populate userId
  * - User: Chỉ xem của mình
  */
-router.get('/', optionalAuthenticate, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
     try {
         const user = req.user;
-        let query = { isActive: true };
-        
-        // User chỉ xem links của mình
-        if (user && user.role !== 'admin') {
+        const query = { isActive: true };
+
+        // If the user is not an admin, only show their own links.
+        if (user.role !== 'admin') {
             query.userId = user._id;
         }
-        
-        // Query với populate userId cho admin
-        let links;
-        if (user?.role === 'admin') {
-            links = await Link.find(query)
-                .populate('userId', 'username displayName avatar')
-                .sort('-createdAt')
-                .select('-clickLogs -clickedIPs');
-        } else {
-            links = await linkService.getAllLinks();
+
+        const linksQuery = Link.find(query)
+            .sort({ createdAt: -1 })
+            .select('-clickLogs -clickedIPs');
+
+        // For admins, populate the user information
+        if (user.role === 'admin') {
+            linksQuery.populate('userId', 'username fullName');
         }
+
+        const links = await linksQuery;
         
-        // Format response để tương thích với frontend
         const formattedLinks = links.map(link => ({
             id: link._id,
             slug: link.slug,
@@ -53,12 +91,10 @@ router.get('/', optionalAuthenticate, async (req, res) => {
             isActive: link.isActive,
             createdAt: link.createdAt,
             updatedAt: link.updatedAt,
-            // Thêm userId cho admin view
             userId: link.userId ? {
                 _id: link.userId._id,
                 username: link.userId.username,
-                displayName: link.userId.displayName,
-                avatar: link.userId.avatar
+                fullName: link.userId.fullName
             } : null
         }));
         
@@ -75,10 +111,9 @@ router.get('/', optionalAuthenticate, async (req, res) => {
         });
     }
 });
-
 /**
  * GET /api/links/:slug
- * Lấy thông tin chi tiết một link
+ * Lấy thông tin chi tiết một link (public - bao gồm content)
  */
 router.get('/:slug', async (req, res) => {
     try {
@@ -98,8 +133,13 @@ router.get('/:slug', async (req, res) => {
                 id: link._id,
                 slug: link.slug,
                 title: link.title,
+                description: link.description,
+                content: link.content,
                 targetUrl: link.targetUrl,
                 imageUrl: link.imageUrl,
+                category: link.category,
+                author: link.author,
+                publishedAt: link.publishedAt,
                 clicks: link.validClicks,
                 totalClicks: link.totalClicks,
                 invalidClicks: link.invalidClicks,
@@ -113,6 +153,36 @@ router.get('/:slug', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Không thể lấy thông tin link'
+        });
+    }
+});
+
+/**
+ * POST /api/links/:slug/track
+ * Track click cho một link (public - gọi từ frontend)
+ */
+router.post('/:slug/track', async (req, res) => {
+    try {
+        const { slug } = req.params;
+        const { ip, userAgent, referer, device } = req.body;
+        
+        const clickResult = await linkService.recordClick(slug, {
+            ip: ip || req.ip,
+            userAgent: userAgent || req.headers['user-agent'],
+            referer: referer || req.headers.referer,
+            device: device || 'desktop',
+            isValid: true // Frontend calls are considered valid
+        });
+        
+        res.json({
+            success: true,
+            data: clickResult
+        });
+    } catch (error) {
+        console.error('Error tracking click:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Không thể tracking click'
         });
     }
 });
@@ -150,7 +220,7 @@ router.get('/:slug/stats', async (req, res) => {
  * POST /api/links
  * Tạo link mới
  */
-router.post('/', async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
     try {
         const { 
             title, 
@@ -163,6 +233,7 @@ router.post('/', async (req, res) => {
             author,
             publishedAt
         } = req.body;
+        const userId = req.user._id; // Get userId from authenticated user
         
         // Validation
         if (!targetUrl) {
@@ -182,7 +253,7 @@ router.post('/', async (req, res) => {
             });
         }
         
-        // Pass all fields to service (service will handle defaults)
+        // Pass all fields to service
         const link = await linkService.createLink({
             title,
             targetUrl,
@@ -192,7 +263,8 @@ router.post('/', async (req, res) => {
             content,
             category,
             author,
-            publishedAt
+            publishedAt,
+            userId // Pass userId to the service
         });
         
         res.status(201).json({

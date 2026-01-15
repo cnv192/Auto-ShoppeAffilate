@@ -117,6 +117,9 @@ const FacebookAccountManager = () => {
     const [editingAccount, setEditingAccount] = useState(null);
     const [form] = Form.useForm();
 
+    const currentUser = authService.getCurrentUser();
+    const isAdmin = currentUser?.role === 'admin';
+
     const fetchAccounts = useCallback(async () => {
         try {
             setLoading(true);
@@ -330,6 +333,12 @@ const FacebookAccountManager = () => {
                 </div>
             )
         },
+        ...(isAdmin ? [{
+            title: 'User sở hữu',
+            dataIndex: 'userId',
+            key: 'userId',
+            render: (userId) => userId ? <Tag>{userId.username}</Tag> : <Tag>System</Tag>
+        }] : []),
         {
             title: 'Token Status',
             dataIndex: 'tokenStatus',

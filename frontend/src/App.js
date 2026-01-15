@@ -5,6 +5,7 @@ import { ConfigProvider, theme, App as AntApp } from 'antd';
 // Components
 import Login from './components/Login';
 import Homepage from './components/Homepage';
+import ArticleDetail from './components/ArticleDetail';
 import AdminLayout from './components/AdminLayout';
 import Dashboard from './components/Dashboard';
 import LinksPage from './components/LinksPage';
@@ -13,6 +14,7 @@ import FacebookAccountManager from './components/FacebookAccountManager';
 import UserManagement from './components/UserManagement';
 import UserProfile from './components/UserProfile';
 import ResourceManagement from './components/ResourceManagement';
+import BannerManagement from './components/BannerManagement';
 import ExtensionAuthPage from './pages/ExtensionAuthPage';
 import authService from './services/authService';
 
@@ -56,9 +58,13 @@ function App() {
         <ConfigProvider theme={themeConfig}>
             <AntApp>
                 <Routes>
-                    {/* Public routes */}
+                    {/* Public routes - Không yêu cầu đăng nhập */}
                     <Route path="/" element={<Homepage />} />
+                    <Route path="/home" element={<Homepage />} />
                     <Route path="/login" element={<Login onLoginSuccess={handleLoginSuccess} />} />
+                    
+                    {/* Article Detail Route - Public */}
+                    <Route path="/:slug" element={<ArticleDetail />} />
                     
                     {/* Extension Auth route - Public để extension có thể access */}
                     <Route path="/ext-auth" element={<ExtensionAuthPage />} />
@@ -73,6 +79,7 @@ function App() {
                                         <Route path="dashboard" element={<Dashboard />} />
                                         <Route path="links" element={<LinksPage />} />
                                         <Route path="campaigns" element={<CampaignList />} />
+                                        <Route path="banners" element={<BannerManagement />} />
                                         <Route path="facebook" element={<FacebookAccountManager />} />
                                         <Route path="resources" element={<ResourceManagement />} />
                                         <Route path="profile" element={<UserProfile />} />

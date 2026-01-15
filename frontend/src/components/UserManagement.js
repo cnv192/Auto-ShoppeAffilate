@@ -108,7 +108,9 @@ const UserManagement = () => {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
+    const [detailsModalVisible, setDetailsModalVisible] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    const [selectedUser, setSelectedUser] = useState(null);
     const [form] = Form.useForm();
     const currentUser = authService.getCurrentUser();
 
@@ -152,6 +154,11 @@ const UserManagement = () => {
             isActive: user.isActive
         });
         setModalVisible(true);
+    };
+
+    const handleShowDetails = (user) => {
+        setSelectedUser(user);
+        setDetailsModalVisible(true);
     };
 
     const handleSubmit = async () => {
@@ -203,7 +210,7 @@ const UserManagement = () => {
             title: 'Người dùng',
             key: 'user',
             render: (_, record) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => handleShowDetails(record)}>
                     <Avatar 
                         size={40}
                         style={{ 
@@ -266,18 +273,35 @@ const UserManagement = () => {
         {
             title: 'Thống kê',
             key: 'stats',
-            width: 150,
+            width: 180,
             render: (_, record) => {
                 const stats = record.stats || {};
                 return (
-                    <div>
-                        <Text style={{ fontSize: 12 }}>
-                            📊 {stats.linksCreated || 0} links
-                        </Text>
-                        <br />
-                        <Text style={{ fontSize: 12 }}>
-                            🚀 {stats.campaignsCreated || 0} chiến dịch
-                        </Text>
+                    <div style={{ fontSize: 13 }}>
+                        <div style={{ marginBottom: 4 }}>
+                            <Text strong style={{ color: '#1890ff' }}>
+                                📊 {stats.linksCreated || 0}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
+                                links
+                            </Text>
+                        </div>
+                        <div style={{ marginBottom: 4 }}>
+                            <Text strong style={{ color: '#52c41a' }}>
+                                🚀 {stats.campaignsCreated || 0}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
+                                chiến dịch
+                            </Text>
+                        </div>
+                        <div>
+                            <Text strong style={{ color: '#fa8c16' }}>
+                                👁️ {stats.totalClicks || 0}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
+                                lượt xem
+                            </Text>
+                        </div>
                     </div>
                 );
             }
@@ -302,7 +326,7 @@ const UserManagement = () => {
             render: (_, record) => {
                 // Can't edit/delete yourself or other admin if you're not the main admin
                 const isCurrentUser = record._id === currentUser?._id;
-                const canEdit = !isCurrentUser || currentUser?.role === 'admin';
+                const canEdit = isCurrentUser || currentUser?.role === 'admin';
                 const canDelete = !isCurrentUser && record.role !== 'admin';
                 
                 return (
@@ -333,7 +357,7 @@ const UserManagement = () => {
     ];
 
     return (
-        <div style={{ padding: 24, background: '#fff', minHeight: '100vh' }}>
+        <div style={{ background: 'transparent', minHeight: '100vh' }}>
             {/* Header */}
             <div style={{ 
                 display: 'flex', 
@@ -341,7 +365,7 @@ const UserManagement = () => {
                 alignItems: 'center',
                 marginBottom: 24
             }}>
-                <Title level={2} style={{ margin: 0, color: '#EE4D2D' }}>
+                <Title level={2} style={{ margin: 0, color: '#ff6b35' }}>
                     <TeamOutlined /> Quản lý Người dùng
                 </Title>
                 
@@ -357,7 +381,7 @@ const UserManagement = () => {
                         icon={<PlusOutlined />}
                         onClick={handleAdd}
                         size="large"
-                        style={{ background: '#EE4D2D', borderColor: '#EE4D2D' }}
+                        style={{ background: '#ff6b35', borderColor: '#ff6b35' }}
                     >
                         Thêm người dùng
                     </Button>
@@ -367,49 +391,73 @@ const UserManagement = () => {
             {/* Stats Cards */}
             <Row gutter={16} style={{ marginBottom: 24 }}>
                 <Col xs={12} sm={6}>
-                    <Card style={{ borderRadius: 8, background: '#fff' }}>
+                    <Card style={{ 
+                        borderRadius: 12, 
+                        background: 'linear-gradient(135deg, #fff 0%, #fff5f0 100%)',
+                        border: 'none',
+                        boxShadow: '0 4px 12px rgba(255,107,53,0.1)'
+                    }}>
                         <Statistic 
                             title="Tổng người dùng" 
                             value={stats.total} 
-                            prefix={<TeamOutlined style={{ color: '#EE4D2D' }} />}
-                            valueStyle={{ color: '#EE4D2D' }}
+                            prefix={<TeamOutlined style={{ color: '#ff6b35' }} />}
+                            valueStyle={{ color: '#ff6b35', fontWeight: 600 }}
                         />
                     </Card>
                 </Col>
                 <Col xs={12} sm={6}>
-                    <Card style={{ borderRadius: 8, background: '#fff' }}>
+                    <Card style={{ 
+                        borderRadius: 12, 
+                        background: 'linear-gradient(135deg, #fff 0%, #fff9f0 100%)',
+                        border: 'none',
+                        boxShadow: '0 4px 12px rgba(250,140,22,0.1)'
+                    }}>
                         <Statistic 
                             title="Admin" 
                             value={stats.admins} 
                             prefix={<CrownOutlined style={{ color: '#fa8c16' }} />}
-                            valueStyle={{ color: '#fa8c16' }}
+                            valueStyle={{ color: '#fa8c16', fontWeight: 600 }}
                         />
                     </Card>
                 </Col>
                 <Col xs={12} sm={6}>
-                    <Card style={{ borderRadius: 8, background: '#fff' }}>
+                    <Card style={{ 
+                        borderRadius: 12, 
+                        background: 'linear-gradient(135deg, #fff 0%, #f6ffed 100%)',
+                        border: 'none',
+                        boxShadow: '0 4px 12px rgba(82,196,26,0.1)'
+                    }}>
                         <Statistic 
                             title="Đang hoạt động" 
                             value={stats.active} 
                             prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
-                            valueStyle={{ color: '#52c41a' }}
+                            valueStyle={{ color: '#52c41a', fontWeight: 600 }}
                         />
                     </Card>
                 </Col>
                 <Col xs={12} sm={6}>
-                    <Card style={{ borderRadius: 8, background: '#fff' }}>
+                    <Card style={{ 
+                        borderRadius: 12, 
+                        background: 'linear-gradient(135deg, #fff 0%, #f5f5f5 100%)',
+                        border: 'none',
+                        boxShadow: '0 4px 12px rgba(191,191,191,0.1)'
+                    }}>
                         <Statistic 
                             title="Vô hiệu hóa" 
                             value={stats.inactive} 
                             prefix={<StopOutlined style={{ color: '#bfbfbf' }} />}
-                            valueStyle={{ color: '#bfbfbf' }}
+                            valueStyle={{ color: '#bfbfbf', fontWeight: 600 }}
                         />
                     </Card>
                 </Col>
             </Row>
 
             {/* Table */}
-            <Card style={{ borderRadius: 8 }}>
+            <Card style={{ 
+                borderRadius: 12,
+                border: 'none',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+            }}>
                 <Table
                     columns={columns}
                     dataSource={users}
@@ -417,10 +465,45 @@ const UserManagement = () => {
                     loading={loading}
                     pagination={{
                         pageSize: 10,
-                        showTotal: (total) => `Tổng ${total} người dùng`
+                        showTotal: (total) => `Tổng ${total} người dùng`,
+                        showSizeChanger: true,
+                        pageSizeOptions: ['10', '20', '50']
                     }}
                 />
             </Card>
+
+            {/* User Details Modal */}
+            <Modal
+                title="Thông tin chi tiết người dùng"
+                open={detailsModalVisible}
+                onCancel={() => setDetailsModalVisible(false)}
+                footer={[
+                    <Button key="back" onClick={() => setDetailsModalVisible(false)}>
+                        Đóng
+                    </Button>,
+                ]}
+                width={400}
+            >
+                {selectedUser && (
+                    <div style={{ textAlign: 'center' }}>
+                        <Avatar 
+                            size={80}
+                            style={{ 
+                                background: selectedUser.role === 'admin' ? '#EE4D2D' : '#1890ff',
+                                marginBottom: 16
+                            }}
+                            icon={selectedUser.role === 'admin' ? <CrownOutlined /> : <UserOutlined />}
+                        />
+                        <Title level={4}>{selectedUser.fullName || selectedUser.username}</Title>
+                        <Text type="secondary">@{selectedUser.username}</Text>
+                        <Divider />
+                        <p><MailOutlined /> {selectedUser.email}</p>
+                        <p><PhoneOutlined /> {selectedUser.phone}</p>
+                        <p><Tag color={selectedUser.isActive ? 'success' : 'default'}>{selectedUser.isActive ? 'Hoạt động' : 'Vô hiệu'}</Tag></p>
+                        <p><Tag color={selectedUser.role === 'admin' ? 'orange' : 'blue'}>{selectedUser.role}</Tag></p>
+                    </div>
+                )}
+            </Modal>
 
             {/* Add/Edit Modal */}
             <Modal

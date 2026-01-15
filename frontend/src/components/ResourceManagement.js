@@ -105,6 +105,9 @@ const ResourceManagement = () => {
     const [form] = Form.useForm();
     const [submitting, setSubmitting] = useState(false);
 
+    const currentUser = authService.getCurrentUser();
+    const isAdmin = currentUser?.role === 'admin';
+
     // Fetch resource sets by type
     const fetchResourceSets = useCallback(async (type) => {
         try {
@@ -263,6 +266,12 @@ const ResourceManagement = () => {
                 </Space>
             )
         },
+        ...(isAdmin ? [{
+            title: 'User sở hữu',
+            dataIndex: 'userId',
+            key: 'userId',
+            render: (userId) => userId ? <Tag>{userId.username}</Tag> : <Tag>System</Tag>
+        }] : []),
         {
             title: 'Số lượng',
             dataIndex: 'content',

@@ -10,7 +10,7 @@ import {
     LinkOutlined, 
     EyeOutlined, 
     RiseOutlined,
-    FireOutlined
+    StopOutlined
 } from '@ant-design/icons';
 
 const StatsCards = ({ links = [] }) => {
@@ -21,10 +21,7 @@ const StatsCards = ({ links = [] }) => {
     const totalLinks = linksArray.length;
     const totalClicks = linksArray.reduce((sum, link) => sum + (link.clicks || 0), 0);
     const activeLinks = linksArray.filter(link => link.isActive).length;
-    const topLink = linksArray.reduce((max, link) => 
-        (link.clicks || 0) > (max.clicks || 0) ? link : max, 
-        { clicks: 0 }
-    );
+    const inactiveLinks = totalLinks - activeLinks;
 
     const cardStyle = {
         borderRadius: 12,
@@ -102,14 +99,14 @@ const StatsCards = ({ links = [] }) => {
                     />
                 </Card>
             </Col>
-            
+
             <Col xs={24} sm={12} lg={6}>
                 <Card 
                     style={cardStyle}
                     hoverable
                     onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = '#fa8c16';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(250, 140, 22, 0.12)';
+                        e.currentTarget.style.borderColor = '#8c8c8c';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(140, 140, 140, 0.12)';
                     }}
                     onMouseLeave={(e) => {
                         e.currentTarget.style.borderColor = '#e8eaed';
@@ -117,24 +114,11 @@ const StatsCards = ({ links = [] }) => {
                     }}
                 >
                     <Statistic
-                        title={<span style={{ fontSize: 14, color: '#6b7280' }}>Link Hot nhất</span>}
-                        value={topLink.clicks || 0}
-                        suffix="clicks"
-                        prefix={<FireOutlined style={{ color: '#fa8c16', fontSize: 20 }} />}
+                        title={<span style={{ fontSize: 14, color: '#6b7280' }}>Link không hoạt động</span>}
+                        value={inactiveLinks}
+                        prefix={<StopOutlined style={{ color: '#8c8c8c', fontSize: 20 }} />}
                         valueStyle={{ color: '#1a1d29', fontSize: 24, fontWeight: 600 }}
                     />
-                    {topLink.slug && (
-                        <div style={{ 
-                            marginTop: 12, 
-                            fontSize: 13, 
-                            color: '#6b7280',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                        }}>
-                            /{topLink.slug}
-                        </div>
-                    )}
                 </Card>
             </Col>
         </Row>

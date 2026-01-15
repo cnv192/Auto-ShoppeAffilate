@@ -30,7 +30,8 @@ import {
     LockOutlined,
     CameraOutlined,
     SaveOutlined,
-    LoadingOutlined
+    LoadingOutlined,
+    PhoneOutlined
 } from '@ant-design/icons';
 import authService from '../services/authService';
 import { getApiUrl } from '../config/api';
@@ -62,7 +63,8 @@ const UserProfile = () => {
                 form.setFieldsValue({
                     username: data.data.username,
                     displayName: data.data.displayName || '',
-                    email: data.data.email || ''
+                    email: data.data.email || '',
+                    phone: data.data.phone || ''
                 });
             } else {
                 message.error('Không thể tải thông tin user');
@@ -131,6 +133,7 @@ const UserProfile = () => {
                 body: JSON.stringify({
                     displayName: values.displayName,
                     email: values.email,
+                    phone: values.phone,
                     avatar: avatarUrl
                 })
             });
@@ -301,6 +304,16 @@ const UserProfile = () => {
                                 <Input 
                                     prefix={<MailOutlined />}
                                     placeholder="Nhập email"
+                                />
+                            </Form.Item>
+
+                            <Form.Item
+                                name="phone"
+                                label="Số điện thoại"
+                            >
+                                <Input 
+                                    prefix={<PhoneOutlined />}
+                                    placeholder="Nhập số điện thoại"
                                 />
                             </Form.Item>
 

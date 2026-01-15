@@ -1,7 +1,5 @@
 import authService from './authService';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
-
 /**
  * Campaign Service - Quản lý campaigns
  */

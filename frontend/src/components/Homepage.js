@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Typography, Row, Col, Card, Tag, Spin, message, Empty, Button } from 'antd';
-import { FireOutlined, ClockCircleOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import { Typography, Row, Col, Tag, Spin, message, Empty, Button, Input, Menu } from 'antd';
+import { FireOutlined, ReloadOutlined, SearchOutlined, ThunderboltOutlined, VideoCameraOutlined, AppstoreOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/vi';
-import { getApiUrl } from '../config/api';
 
 dayjs.extend(relativeTime);
 dayjs.locale('vi');
@@ -32,15 +30,15 @@ const Homepage = () => {
             setLoading(true);
             setError(null);
             
-            // Use centralized config
-            const response = await axios.get(getApiUrl('links'));
+            // Gọi API backend để lấy tất cả bài viết (public)
+            const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:3001'}/api/links/public`);
             
-            // Ensure response has data
-            if (!response.data) {
-                throw new Error('Invalid response from server');
+            if (!response.ok) {
+                throw new Error('Không thể tải bài viết');
             }
             
-            const allLinks = response.data.data || response.data || [];
+            const data = await response.json();
+            const allLinks = data.data || [];
             
             if (!Array.isArray(allLinks)) {
                 throw new Error('Invalid data format');
@@ -74,14 +72,33 @@ const Homepage = () => {
     
     const getCategoryColor = (category) => {
         const colors = {
-            'Khuyến mãi': 'red',
-            'Flash Sale': 'orange',
-            'Thời trang': 'pink',
-            'Điện tử': 'blue',
-            'Làm đẹp': 'purple',
-            'Gia dụng': 'green'
+            'Khuyến mãi': '#ee4d2d',
+            'Flash Sale': '#ff6b35',
+            'Thời trang': '#eb2f96',
+            'Điện tử': '#1890ff',
+            'Làm đẹp': '#9c27b0',
+            'Gia dụng': '#52c41a'
         };
-        return colors[category] || 'default';
+        return colors[category] || '#595959';
+    };
+    
+    const getCategoryTag = (category) => {
+        if (!category) return null;
+        
+        const tagStyle = {
+            padding: '0 6px',
+            fontSize: 11,
+            fontWeight: 600,
+            border: 'none',
+            borderRadius: 2,
+            marginRight: 6
+        };
+        
+        return (
+            <Tag style={{ ...tagStyle, background: getCategoryColor(category), color: 'white' }}>
+                {category}
+            </Tag>
+        );
     };
     
     if (loading) {
@@ -110,174 +127,320 @@ const Homepage = () => {
         );
     }
     
-    const featuredPost = links[0];
-    const latestPosts = links.slice(1, 7);
-    
     return (
-        <div style={{ background: '#fff', minHeight: '100vh' }}>
-            {/* Header */}
+        <div style={{ background: '#f5f5f5', minHeight: '100vh' }}>
+            {/* Header - Báo Mới Style */}
             <div style={{
-                background: '#EE4D2D',
-                padding: '20px 0'
+                background: 'white',
+                borderBottom: '3px solid #26a9e0',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
             }}>
-                <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 20px' }}>
-                    <Title level={1} style={{ 
-                        margin: 0, 
-                        color: '#fff',
-                        fontSize: 48,
-                        fontWeight: 900,
-                        textAlign: 'center'
-                    }}>
-                        <FireOutlined /> HOT NEWS
-                    </Title>
-                    <Text style={{ 
-                        display: 'block', 
-                        textAlign: 'center',
-                        fontSize: 16,
-                        marginTop: 8,
-                        color: 'rgba(255,255,255,0.9)'
-                    }}>
-                        Cập nhật tin tức khuyến mãi mới nhất mỗi ngày
-                    </Text>
+                {/* Top Bar */}
+                <div style={{ 
+                    maxWidth: 1200, 
+                    margin: '0 auto', 
+                    padding: '16px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                }}>
+                    {/* Logo */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{
+                            background: 'linear-gradient(135deg, #26a9e0 0%, #1e88c7 100%)',
+                            padding: '8px 16px',
+                            borderRadius: 4,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8
+                        }}>
+                            <FireOutlined style={{ color: 'white', fontSize: 24 }} />
+                            <span style={{ 
+                                color: 'white', 
+                                fontSize: 24, 
+                                fontWeight: 900,
+                                letterSpacing: 1
+                            }}>
+                                HOT NEWS
+                            </span>
+                        </div>
+                        <Text style={{ fontSize: 12, color: '#999', marginLeft: 8 }}>
+                            Tin tức hot nhiều người quan tâm
+                        </Text>
+                    </div>
+                    
+                    {/* Search Bar */}
+                    <Input
+                        placeholder="Nhập nội dung tìm kiếm"
+                        prefix={<SearchOutlined style={{ color: '#999' }} />}
+                        style={{
+                            width: 400,
+                            borderRadius: 4,
+                            border: '1px solid #e0e0e0'
+                        }}
+                    />
+                </div>
+                
+                {/* Navigation Menu */}
+                <div style={{ 
+                    maxWidth: 1200, 
+                    margin: '0 auto',
+                    borderTop: '1px solid #f0f0f0'
+                }}>
+                    <Menu
+                        mode="horizontal"
+                        defaultSelectedKeys={['home']}
+                        style={{
+                            border: 'none',
+                            background: 'white',
+                            fontSize: 14,
+                            fontWeight: 600,
+                            marginBottom: 5
+                        }}
+                        items={[
+                            {
+                                key: 'home',
+                                icon: <FireOutlined />,
+                                label: 'NÓNG',
+                            },
+                            {
+                                key: 'new',
+                                icon: <ThunderboltOutlined />,
+                                label: 'MỚI',
+                            },
+                            {
+                                key: 'video',
+                                icon: <VideoCameraOutlined />,
+                                label: 'VIDEO',
+                            },
+                            {
+                                key: 'topics',
+                                icon: <AppstoreOutlined />,
+                                label: 'CHỦ ĐỀ',
+                            }
+                        ]}
+                    />
                 </div>
             </div>
             
-            {/* Content */}
-            <div style={{ maxWidth: 1200, margin: '30px auto', padding: '0 20px' }}>
+            {/* Main Content */}
+            <div style={{ maxWidth: 1200, margin: '20px auto', padding: '0 20px' , height: '70vh'}}>
                 <Row gutter={24}>
-                    {/* Main Content */}
+                    {/* Main Content - Left Column */}
                     <Col xs={24} lg={16}>
-                        {/* Featured Post */}
-                        {featuredPost && (
-                            <Card
-                                hoverable
-                                style={{ marginBottom: 24 }}
-                                cover={
-                                    <div style={{ 
-                                        height: 400, 
-                                        background: `url(${featuredPost.imageUrl}) center/cover`,
-                                        position: 'relative'
-                                    }}>
-                                        <div style={{
-                                            position: 'absolute',
-                                            bottom: 0,
-                                            left: 0,
-                                            right: 0,
-                                            padding: 24,
-                                            background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
-                                            color: '#fff'
-                                        }}>
-                                            {featuredPost.category && (
-                                                <Tag color={getCategoryColor(featuredPost.category)} style={{ marginBottom: 8 }}>
-                                                    {featuredPost.category}
-                                                </Tag>
-                                            )}
-                                            <Title level={2} style={{ color: '#fff', margin: 0 }}>
-                                                {featuredPost.title}
-                                            </Title>
-                                            <Text style={{ color: 'rgba(255,255,255,0.8)' }}>
-                                                <ClockCircleOutlined /> {dayjs(featuredPost.publishedAt || featuredPost.createdAt).fromNow()}
-                                            </Text>
-                                        </div>
-                                    </div>
-                                }
-                                onClick={() => window.location.href = `/${featuredPost.slug}`}
-                            >
-                                <Paragraph ellipsis={{ rows: 2 }}>
-                                    {featuredPost.description}
-                                </Paragraph>
-                            </Card>
-                        )}
-                        
-                        {/* Latest Posts Grid */}
-                        <Row gutter={[16, 16]}>
-                            {latestPosts.map(link => (
-                                <Col xs={24} md={12} key={link._id}>
-                                    <Card
-                                        hoverable
-                                        cover={
-                                            <div style={{ 
-                                                height: 200, 
-                                                background: `url(${link.imageUrl}) center/cover` 
-                                            }} />
-                                        }
-                                        onClick={() => window.location.href = `/${link.slug}`}
-                                    >
-                                        {link.category && (
-                                            <Tag color={getCategoryColor(link.category)} style={{ marginBottom: 8 }}>
-                                                {link.category}
-                                            </Tag>
-                                        )}
-                                        <Title level={4} ellipsis={{ rows: 2 }} style={{ margin: '8px 0' }}>
-                                            {link.title}
-                                        </Title>
-                                        <Paragraph ellipsis={{ rows: 2 }} type="secondary">
-                                            {link.description}
-                                        </Paragraph>
-                                        <Text type="secondary" style={{ fontSize: 12 }}>
-                                            <ClockCircleOutlined /> {dayjs(link.publishedAt || link.createdAt).fromNow()}
-                                        </Text>
-                                    </Card>
-                                </Col>
-                            ))}
-                        </Row>
-                    </Col>
-                    
-                    {/* Sidebar - Hot Links */}
-                    <Col xs={24} lg={8}>
-                        <Card 
-                            title={<><FireOutlined /> Bài viết HOT nhất</>}
-                            style={{ position: 'sticky', top: 20 }}
-                        >
-                            {hotLinks.map((link, index) => (
+                        {/* Section Header */}
+                        <div style={{
+                            background: 'white',
+                            padding: '12px 16px',
+                            marginBottom: 16,
+                            borderLeft: '3px solid #26a9e0',
+                            borderRadius: 2
+                        }}>
+                            <Title level={4} style={{ margin: 0, color: '#333', fontSize: 16, fontWeight: 700 }}>
+                                TIN MỚI
+                            </Title>
+                        </div>
+
+                        {/* News List */}
+                        <div style={{ background: 'white', borderRadius: 4, overflow: 'hidden' }}>
+                            {links.map((link, index) => (
                                 <div 
                                     key={link._id}
-                                    style={{
-                                        padding: '12px 0',
-                                        borderBottom: index < hotLinks.length - 1 ? '1px solid #f0f0f0' : 'none',
-                                        cursor: 'pointer'
-                                    }}
                                     onClick={() => window.location.href = `/${link.slug}`}
+                                    style={{
+                                        display: 'flex',
+                                        gap: 16,
+                                        padding: 16,
+                                        borderBottom: index < links.length - 1 ? '1px solid #f0f0f0' : 'none',
+                                        cursor: 'pointer',
+                                        transition: 'background 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = '#fafafa'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
                                 >
-                                    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                                        <div style={{
-                                            fontSize: 24,
-                                            fontWeight: 'bold',
-                                            color: index === 0 ? '#EE4D2D' : index === 1 ? '#FF6B35' : '#999',
-                                            minWidth: 30
-                                        }}>
-                                            {index + 1}
-                                        </div>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <Text strong ellipsis style={{ 
-                                                display: 'block',
+                                    {/* Thumbnail */}
+                                    <div style={{
+                                        width: 180,
+                                        height: 120,
+                                        flexShrink: 0,
+                                        borderRadius: 4,
+                                        overflow: 'hidden',
+                                        background: '#f0f0f0'
+                                    }}>
+                                        <img 
+                                            src={link.imageUrl} 
+                                            alt={link.title}
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover'
+                                            }}
+                                        />
+                                    </div>
+                                    
+                                    {/* Content */}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        {/* Title */}
+                                        <Title 
+                                            level={5} 
+                                            style={{
+                                                margin: '0 0 8px 0',
+                                                fontSize: 16,
+                                                fontWeight: 600,
+                                                lineHeight: 1.4,
+                                                color: '#333',
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                                overflow: 'hidden'
+                                            }}
+                                        >
+                                            {link.title}
+                                        </Title>
+                                        
+                                        {/* Description */}
+                                        <Paragraph 
+                                            style={{
+                                                margin: '0 0 8px 0',
                                                 fontSize: 14,
-                                                marginBottom: 4
-                                            }}>
-                                                {link.title}
+                                                color: '#666',
+                                                lineHeight: 1.5,
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                                overflow: 'hidden'
+                                            }}
+                                        >
+                                            {link.description}
+                                        </Paragraph>
+                                        
+                                        {/* Meta */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                                            {getCategoryTag(link.category)}
+                                            <Text style={{ fontSize: 12, color: '#999' }}>
+                                                {dayjs(link.publishedAt || link.createdAt).fromNow()}
                                             </Text>
-                                            <Text type="secondary" style={{ fontSize: 12 }}>
-                                                <EyeOutlined /> {link.clicks || link.clickCount || 0} lượt xem
+                                            <Text style={{ fontSize: 12, color: '#999' }}>
+                                                {(link.clicks || link.clickCount || 0)} lượt xem
                                             </Text>
                                         </div>
                                     </div>
                                 </div>
                             ))}
-                        </Card>
+                        </div>
+                    </Col>
+                    
+                    {/* Sidebar - Right Column */}
+                    <Col xs={24} lg={8}>
+                        {/* Hot News Section */}
+                        <div style={{
+                            background: 'white',
+                            padding: '12px 16px',
+                            marginBottom: 16,
+                            borderLeft: '3px solid #ee4d2d',
+                            borderRadius: 2
+                        }}>
+                            <Title level={4} style={{ 
+                                margin: 0, 
+                                color: '#ee4d2d', 
+                                fontSize: 16, 
+                                fontWeight: 700 
+                            }}>
+                                <FireOutlined /> NÓNG 24H
+                            </Title>
+                        </div>
+                        
+                        <div style={{ background: 'white', borderRadius: 4, overflow: 'hidden' }}>
+                            {hotLinks.map((link, index) => (
+                                <div 
+                                    key={link._id}
+                                    onClick={() => window.location.href = `/${link.slug}`}
+                                    style={{
+                                        display: 'flex',
+                                        gap: 12,
+                                        padding: 12,
+                                        borderBottom: index < hotLinks.length - 1 ? '1px solid #f0f0f0' : 'none',
+                                        cursor: 'pointer',
+                                        transition: 'background 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = '#fafafa'}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                                >
+                                    {/* Thumbnail */}
+                                    <div style={{
+                                        width: 100,
+                                        height: 70,
+                                        flexShrink: 0,
+                                        borderRadius: 4,
+                                        overflow: 'hidden',
+                                        background: '#f0f0f0',
+                                        position: 'relative'
+                                    }}>
+                                        <img 
+                                            src={link.imageUrl} 
+                                            alt={link.title}
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover'
+                                            }}
+                                        />
+                                        {/* Video icon if applicable */}
+                                        {link.category === 'VIDEO' && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: 4,
+                                                right: 4,
+                                                background: 'rgba(0,0,0,0.7)',
+                                                borderRadius: 2,
+                                                padding: '2px 4px'
+                                            }}>
+                                                <VideoCameraOutlined style={{ color: 'white', fontSize: 10 }} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Content */}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        {getCategoryTag(link.category)}
+                                        <Title 
+                                            level={5} 
+                                            style={{
+                                                margin: '4px 0',
+                                                fontSize: 14,
+                                                fontWeight: 600,
+                                                lineHeight: 1.4,
+                                                color: '#333',
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 3,
+                                                WebkitBoxOrient: 'vertical',
+                                                overflow: 'hidden'
+                                            }}
+                                        >
+                                            {link.title}
+                                        </Title>
+                                        <Text style={{ fontSize: 11, color: '#999' }}>
+                                            {(link.clicks || link.clickCount || 0)} lượt xem
+                                        </Text>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </Col>
                 </Row>
             </div>
             
             {/* Footer */}
             <div style={{
-                background: '#EE4D2D',
+                background: '#26a9e0',
                 color: '#fff',
-                padding: '40px 20px',
-                marginTop: 60,
-                textAlign: 'center'
+                padding: '24px 20px',
+                marginTop: 40,
+                textAlign: 'center',
+                borderTop: '3px solid #1e88c7'
             }}>
-                <Text style={{ color: '#fff' }}>
-                    © 2026 Hot News. All rights reserved.
+                <Text style={{ color: '#fff', fontSize: 13 }}>
+                    © 2026 Hot News - Tin tức khuyến mãi điện tử
                 </Text>
             </div>
         </div>

@@ -119,34 +119,47 @@ router.post('/', authenticate, async (req, res) => {
  */
 router.get('/', authenticate, async (req, res) => {
     try {
-        const { type, page = 1, limit = 50 } = req.query;
-        
-        // Build query
-        const query = {
-            $or: [
-                { userId: req.user._id },
-                { isDefault: true }
-            ]
-        };
+        const { type, page = 1, limit = 50, userId: queryUserId } = req.query;
+        const pageInt = parseInt(page);
+        const limitInt = parseInt(limit);
+
+        let query = {};
+
+        if (req.user.role === 'admin') {
+            // Admin can see all or filter by user
+            if (queryUserId) {
+                query.userId = queryUserId;
+            }
+        } else {
+            // User sees their own + default sets
+            query = {
+                $or: [
+                    { userId: req.user._id },
+                    { isDefault: true }
+                ]
+            };
+        }
         
         if (type) {
             query.type = type;
         }
         
-        const total = await ResourceSet.countDocuments(query);
+        const totalDocs = await ResourceSet.countDocuments(query);
         const resourceSets = await ResourceSet.find(query)
-            .sort({ isDefault: -1, usageCount: -1, updatedAt: -1 })
-            .skip((page - 1) * limit)
-            .limit(parseInt(limit))
+            .sort({ isDefault: -1, updatedAt: -1 })
+            .skip((pageInt - 1) * limitInt)
+            .limit(limitInt)
+            .populate('userId', 'username fullName')
             .lean();
         
         res.json({
             success: true,
             data: {
-                resourceSets,
-                total,
-                page: parseInt(page),
-                pages: Math.ceil(total / limit)
+                docs: resourceSets,
+                totalDocs,
+                page: pageInt,
+                totalPages: Math.ceil(totalDocs / limitInt),
+                limit: limitInt,
             }
         });
         
@@ -177,7 +190,15 @@ router.get('/by-type/:type', authenticate, async (req, res) => {
             });
         }
         
-        const resourceSets = await ResourceSet.findForUser(req.user._id, type);
+        let resourceSets;
+        if (req.user.role === 'admin') {
+            resourceSets = await ResourceSet.find({ type })
+                .sort({ createdAt: -1 })
+                .populate('userId', 'username fullName')
+                .lean();
+        } else {
+            resourceSets = await ResourceSet.findForUser(req.user._id, type);
+        }
         
         // Format for dropdown: add displayLabel
         const formattedSets = resourceSets.map(set => ({

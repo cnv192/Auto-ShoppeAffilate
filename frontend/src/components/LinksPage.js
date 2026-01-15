@@ -72,9 +72,16 @@ function LinksPage() {
         }
     }, []);
 
-    // Initial load
+    // Initial load & auto-refresh
     useEffect(() => {
-        fetchLinks();
+        fetchLinks(); // Initial load
+        
+        const interval = setInterval(() => {
+            fetchLinks();
+            console.log('🔄 [LinksPage] Auto-refreshing links data...');
+        }, 30000); // 30 seconds
+        
+        return () => clearInterval(interval); // Cleanup on unmount
     }, [fetchLinks]);
 
     // Handle create new link

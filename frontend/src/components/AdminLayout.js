@@ -9,7 +9,8 @@ import {
     ThunderboltOutlined,
     LogoutOutlined,
     SettingOutlined,
-    FolderOutlined
+    FolderOutlined,
+    FileImageOutlined
 } from '@ant-design/icons';
 import authService from '../services/authService';
 
@@ -36,6 +37,7 @@ const AdminLayout = ({ children }) => {
         if (path.includes('/admin/resources')) return 'resources';
         if (path.includes('/admin/users')) return 'users';
         if (path.includes('/admin/profile')) return 'profile';
+        if (path.includes('/homepage')) return 'homepage';
         return 'dashboard';
     }, [location.pathname]);
     
@@ -91,6 +93,11 @@ const AdminLayout = ({ children }) => {
                 label: 'Chiến dịch'
             },
             {
+                key: 'banners',
+                icon: <FileImageOutlined />,
+                label: 'Quản lý Banner'
+            },
+            {
                 key: 'resources',
                 icon: <FolderOutlined />,
                 label: 'Resource Sets'
@@ -119,7 +126,7 @@ const AdminLayout = ({ children }) => {
     };
     
     return (
-        <Layout style={{ minHeight: '100vh', background: '#f5f7fa' }}>
+        <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #fff5f0 0%, #ffe5d9 100%)' }}>
             {/* Fixed Sidebar */}
             <Sider
                 breakpoint="lg"
@@ -132,7 +139,7 @@ const AdminLayout = ({ children }) => {
                     left: 0,
                     top: 0,
                     bottom: 0,
-                    background: '#1a1d29',
+                    background: '#2c1810',
                     zIndex: 1000,
                     boxShadow: '2px 0 8px rgba(0,0,0,0.08)'
                 }}
@@ -146,12 +153,12 @@ const AdminLayout = ({ children }) => {
                     color: '#fff',
                     fontSize: 20,
                     fontWeight: 600,
-                    background: '#151821',
+                    background: '#1f0f08',
                     borderBottom: '2px solid rgba(255,255,255,0.08)',
                     padding: '0 20px'
                 }}>
                     <span style={{ marginRight: 8 }}>🔥</span>
-                    <span>Link Manager</span>
+                    <span>Admin Panel</span>
                 </div>
                 
                 {/* Menu */}
@@ -162,7 +169,7 @@ const AdminLayout = ({ children }) => {
                     items={menuItems}
                     onClick={handleMenuClick}
                     style={{ 
-                        background: '#1a1d29',
+                        background: '#2c1810',
                         borderRight: 0,
                         padding: '8px 0'
                     }}
@@ -172,7 +179,7 @@ const AdminLayout = ({ children }) => {
             {/* Main Content Area */}
             <Layout style={{ 
                 marginLeft: 240, 
-                background: '#f5f7fa',
+                background: 'linear-gradient(135deg, #fff5f0 0%, #ffe5d9 100%)',
                 minHeight: '100vh'
             }}>
                 {/* Fixed Header */}
@@ -203,7 +210,8 @@ const AdminLayout = ({ children }) => {
                             padding: '6px 12px',
                             borderRadius: 8,
                             transition: 'background 0.2s',
-                            maxWidth: 220
+                            maxWidth: 220,
+                            lineHeight: '30px'
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.background = '#f5f7fa'}
                         onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
@@ -212,7 +220,7 @@ const AdminLayout = ({ children }) => {
                                 src={user?.avatar}
                                 icon={<UserOutlined />} 
                                 style={{ 
-                                    background: '#EE4D2D',
+                                    background: '#ff6b35',
                                     flexShrink: 0,
                                     width: 40,
                                     height: 40,
@@ -239,7 +247,7 @@ const AdminLayout = ({ children }) => {
                 {/* Scrollable Content */}
                 <Content style={{
                     padding: '32px',
-                    background: '#f5f7fa',
+                    background: 'linear-gradient(135deg, #fff5f0 0%, #ffe5d9 100%)',
                     minHeight: 'calc(100vh - 64px)',
                     overflow: 'auto'
                 }}>

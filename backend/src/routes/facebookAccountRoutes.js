@@ -103,15 +103,27 @@ router.post('/', authenticate, async (req, res) => {
  */
 router.get('/', authenticate, async (req, res) => {
     try {
-        const { isActive } = req.query;
+        const { isActive, userId: queryUserId } = req.query;
         
-        // Admin có thể xem tất cả, User chỉ xem của mình
-        const userId = req.userRole === 'admin' && req.query.userId ? req.query.userId : req.userId;
+        let query = {};
         
-        const accounts = await FacebookAccount.getByUser(userId, {
-            isActive: isActive !== undefined ? isActive === 'true' : undefined
-        });
-        
+        if (isActive !== undefined) {
+            query.isActive = isActive === 'true';
+        }
+
+        if (req.user.role === 'admin') {
+            if (queryUserId) {
+                query.userId = queryUserId;
+            }
+        } else {
+            query.userId = req.user._id;
+        }
+
+        const accounts = await FacebookAccount.find(query)
+            .sort({ createdAt: -1 })
+            .populate('userId', 'username fullName')
+            .select('-accessToken -cookie -fb_dtsg -jazoest -lsd -userAgent');
+
         return res.json({
             success: true,
             data: accounts

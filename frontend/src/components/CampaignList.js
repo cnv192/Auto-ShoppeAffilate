@@ -393,6 +393,9 @@ const CampaignList = () => {
         completed: campaigns.filter(c => c.status === 'completed').length
     };
 
+    const currentUser = authService.getCurrentUser();
+    const isAdmin = currentUser?.role === 'admin';
+
     const columns = [
         {
             title: 'Tên chiến dịch',
@@ -424,6 +427,14 @@ const CampaignList = () => {
                 );
             }
         },
+        ...(isAdmin ? [{
+            title: 'User sở hữu',
+            dataIndex: 'userId',
+            key: 'userId',
+            render: (userId) => userId ? (
+                <Tag>{userId.username}</Tag>
+            ) : <Tag>System</Tag>
+        }] : []),
         {
             title: 'Trạng thái',
             dataIndex: 'status',

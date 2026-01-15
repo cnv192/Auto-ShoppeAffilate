@@ -23,7 +23,8 @@ const createLink = async (linkData) => {
         content,
         category,
         author,
-        publishedAt
+        publishedAt,
+        userId // Added userId
     } = linkData;
     
     try {
@@ -36,7 +37,8 @@ const createLink = async (linkData) => {
             content: content || '',
             category: category || 'Khuyến mãi',
             author: author || 'Shopee Deals VN',
-            publishedAt: publishedAt ? new Date(publishedAt) : new Date()
+            publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
+            userId // Pass userId to the model
         });
         
         console.log(`✅ [LinkService] Tạo link: /${link.slug} → ${targetUrl}`);
