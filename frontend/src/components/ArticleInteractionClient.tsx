@@ -1,7 +1,7 @@
 'use client'
 
 import { useUserInteraction } from '@/hooks/useUserInteraction'
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 
 interface ArticleInteractionClientProps {
   isCloaked?: boolean
@@ -13,6 +13,30 @@ interface ArticleInteractionClientProps {
  * - Lazy loads external scripts/iframes on user interaction
  */
 export function ArticleInteractionClient({ isCloaked = false }: ArticleInteractionClientProps) {
+  const loadExternalResources = useCallback(() => {
+    // Example: Load external scripts, iframes, or tracking code
+    console.log('User interacted - loading external resources')
+
+    // You can trigger loading of:
+    // - Analytics scripts
+    // - Ad networks
+    // - Social media embeds
+    // - Comment systems
+    // - Other third-party services
+
+    // Example:
+    if (!isCloaked) {
+      // Load GA or similar tracking
+      const script = document.createElement('script')
+      script.async = true
+      script.src = 'https://www.googletagmanager.com/gtag/js?id=GA_ID'
+      document.head.appendChild(script)
+
+      // Load ad networks
+      console.log('Loading ads...')
+    }
+  }, [isCloaked])
+
   // Initialize user interaction detection
   useUserInteraction({
     scrollThreshold: 200,
@@ -36,38 +60,7 @@ export function ArticleInteractionClient({ isCloaked = false }: ArticleInteracti
       }
     }
     loadExternalResources()
-  }, [])
-
-  function loadExternalResources() {
-    // Example: Load external scripts, iframes, or tracking code
-    console.log('User interacted - loading external resources')
-
-    // You can trigger loading of:
-    // - Analytics scripts
-    // - Ad networks
-    // - Social media embeds
-    // - Comment systems
-    // - Other third-party services
-
-    // Example:
-    if (!isCloaked) {
-      loadTracking()
-      loadAds()
-    }
-  }
-
-  function loadTracking() {
-    // Load GA or similar tracking
-    const script = document.createElement('script')
-    script.async = true
-    script.src = 'https://www.googletagmanager.com/gtag/js?id=GA_ID'
-    document.head.appendChild(script)
-  }
-
-  function loadAds() {
-    // Load ad networks
-    console.log('Loading ads...')
-  }
+  }, [loadExternalResources])
 
   return null
 }
