@@ -636,6 +636,12 @@ const ipFilterMiddleware = (options = {}) => {
         if (req.path === '/health' || req.path === '/api/health') {
             return next();
         }
+
+        // Bỏ qua tất cả API routes - chúng được bảo vệ bằng auth token
+        // IP filter chỉ dùng để chặn bot trên public pages, không chặn API calls từ frontend server
+        if (req.path.startsWith('/api/')) {
+            return next();
+        }
         
         // Phân tích IP
         const analysis = analyzeIP(clientIP);
