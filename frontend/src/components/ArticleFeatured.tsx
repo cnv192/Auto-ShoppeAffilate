@@ -9,7 +9,7 @@ interface ArticleFeaturedProps {
 
 export function ArticleFeatured({ article }: ArticleFeaturedProps) {
     const slug = article.slug || article._id
-    const href = `/article/${slug}`
+    const href = `/${slug}`
     const imageUrl = article.imageUrl || article.thumbnail
 
     return (

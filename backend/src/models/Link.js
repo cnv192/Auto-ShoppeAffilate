@@ -71,7 +71,7 @@ const LinkSchema = new Schema({
         lowercase: true,
         index: true,
         minlength: 2,
-        maxlength: 50
+        maxlength: 100
     },
     
     // Tiêu đề hiển thị trên preview
@@ -256,7 +256,7 @@ LinkSchema.virtual('ctr').get(function() {
 // Full URL - Use FRONTEND_URL for public links
 LinkSchema.virtual('shortUrl').get(function() {
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    return `${baseUrl}/go/${this.slug}`;
+    return `${baseUrl}/${this.slug}`;
 });
 
 // =================================================================

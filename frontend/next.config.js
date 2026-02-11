@@ -46,7 +46,13 @@ const nextConfig = {
 
   // Redirects for backward compatibility (if needed)
   async redirects() {
-    return [];
+    return [
+      {
+        source: '/article/:slug',
+        destination: '/:slug',
+        permanent: true,
+      },
+    ];
   },
 
   // Environment variables

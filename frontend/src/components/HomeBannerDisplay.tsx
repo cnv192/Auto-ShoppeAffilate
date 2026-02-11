@@ -102,7 +102,7 @@ export default function HomeBannerDisplay() {
         }
 
         // Navigate
-        const targetUrl = currentBanner.targetUrl || (currentBanner.targetSlug ? `/article/${currentBanner.targetSlug}` : null);
+        const targetUrl = currentBanner.targetUrl || (currentBanner.targetSlug ? `/${currentBanner.targetSlug}` : null);
         if (targetUrl) {
             if (targetUrl.startsWith('http')) {
                 window.open(targetUrl, '_blank', 'noopener,noreferrer');

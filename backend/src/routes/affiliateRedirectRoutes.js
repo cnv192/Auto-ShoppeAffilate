@@ -176,7 +176,7 @@ router.get('/go/:slug', async (req, res) => {
             return res.redirect(302, link.targetUrl);
         } else {
             // No targetUrl set, redirect to article page
-            return res.redirect(302, `/article/${slug}`);
+            return res.redirect(302, `/${slug}`);
         }
 
     } catch (err) {

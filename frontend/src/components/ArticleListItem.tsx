@@ -11,7 +11,7 @@ interface ArticleListItemProps {
 
 export function ArticleListItem({ article, showImage = true, index }: ArticleListItemProps) {
     const slug = article.slug || article._id
-    const href = `/article/${slug}`
+    const href = `/${slug}`
 
     return (
         <Link href={href} className="block">

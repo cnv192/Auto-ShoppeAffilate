@@ -100,8 +100,8 @@ async function getAllStoredOperations() {
 // CONFIG: Centralized configuration
 // ============================================
 const CONFIG = {
-    BACKEND_URL: 'http://localhost:3001',
-    FRONTEND_URL: 'http://localhost:3000/admin'
+    BACKEND_URL: 'https://api-tintuc24h.itup.io.vn',
+    FRONTEND_URL: 'https://tintuc24h-ivory.vercel.app/admin'
 };
 
 console.log('[BG] Config loaded:', CONFIG);

@@ -14,8 +14,8 @@
 
   "host_permissions": [
     "*://*.facebook.com/*",
-    "http://localhost:3000/*",
-    "http://localhost:3001/*"
+    "https://tintuc24h-ivory.vercel.app/*",
+    "https://api-tintuc24h.itup.io.vn/*"
   ],
 
   "background": {

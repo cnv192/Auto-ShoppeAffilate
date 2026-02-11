@@ -82,7 +82,7 @@ export default function BannerDisplay({ type = 'sticky_bottom', articleSlug, cat
         }
 
         // Use targetUrl from API response (already resolved to the correct destination)
-        const targetUrl = banner.targetUrl || (banner.targetSlug ? `/article/${banner.targetSlug}` : null);
+        const targetUrl = banner.targetUrl || (banner.targetSlug ? `/${banner.targetSlug}` : null);
 
         if (targetUrl) {
             if (targetUrl.startsWith('http')) {

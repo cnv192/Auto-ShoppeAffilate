@@ -10,7 +10,7 @@ interface ArticleCardProps {
 
 export function ArticleCard({ article, variant = 'default' }: ArticleCardProps) {
   const slug = article.slug || article._id
-  const href = `/article/${slug}`
+  const href = `/${slug}`
   const imageUrl = article.imageUrl || article.thumbnail
 
   if (variant === 'horizontal') {

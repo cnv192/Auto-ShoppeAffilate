@@ -62,7 +62,7 @@ const create = async (req, res) => {
         }
 
         // Use targetUrl from request body directly
-        const resolvedTargetUrl = targetUrl || `/article/${targetSlug.toLowerCase()}`;
+        const resolvedTargetUrl = targetUrl || `/${targetSlug.toLowerCase()}`;
 
         // Create banner
         const banner = new Banner({
