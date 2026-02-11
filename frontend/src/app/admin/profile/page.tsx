@@ -25,7 +25,7 @@ import {
     LoadingOutlined,
     PhoneOutlined
 } from '@ant-design/icons';
-import { getCurrentUser, getToken } from '@/lib/authService';
+import { getCurrentUser, getToken, updateCurrentUser } from '@/lib/authService';
 import { getApiUrl } from '@/lib/adminApi';
 
 const { Title, Text } = Typography;
@@ -157,11 +157,14 @@ export default function ProfilePage() {
             
             if (data.success) {
                 message.success('Cập nhật thông tin thành công!');
-                const currentUser = getCurrentUser();
-                if (currentUser) {
-                    currentUser.fullName = values.displayName;
-                    localStorage.setItem('user', JSON.stringify(currentUser));
-                }
+                // Cập nhật tất cả trường vào localStorage và thông báo layout
+                updateCurrentUser({
+                    fullName: values.displayName,
+                    displayName: values.displayName,
+                    email: values.email,
+                    phone: values.phone,
+                    avatar: avatarUrl,
+                });
             } else {
                 message.error(data.message || 'Cập nhật thất bại');
             }
@@ -206,16 +209,8 @@ export default function ProfilePage() {
         }
     };
 
-    if (loading) {
-        return (
-            <div style={{ textAlign: 'center', padding: 60 }}>
-                <Spin size="large" />
-            </div>
-        );
-    }
-
     return (
-        <>
+        <Spin spinning={loading} size="large" style={{ minHeight: 200 }}>
             {/* Header */}
             <div style={{
                 display: 'flex',
@@ -229,7 +224,7 @@ export default function ProfilePage() {
                     <Title level={2} style={{
                         margin: 0,
                         marginBottom: 8,
-                        color: '#EE4D2D',
+                        color: '#D31016',
                         fontSize: 24,
                         fontWeight: 600,
                         display: 'flex',
@@ -270,7 +265,7 @@ export default function ProfilePage() {
                                             src={avatarUrl || undefined}
                                             icon={<UserOutlined />}
                                             style={{ 
-                                                backgroundColor: '#EE4D2D',
+                                                backgroundColor: '#D31016',
                                                 border: '3px solid #fff',
                                                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                                             }}
@@ -281,7 +276,7 @@ export default function ProfilePage() {
                                             position: 'absolute',
                                             bottom: 0,
                                             right: 0,
-                                            background: '#EE4D2D',
+                                            background: '#D31016',
                                             borderRadius: '50%',
                                             padding: 8,
                                             border: '2px solid white'
@@ -443,6 +438,6 @@ export default function ProfilePage() {
                 </Col>
             </Row>
             </div>
-        </>
+        </Spin>
     );
 }

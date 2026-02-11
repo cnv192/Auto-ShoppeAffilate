@@ -85,6 +85,11 @@ router.get('/', authenticate, async (req, res) => {
             title: link.title,
             targetUrl: link.targetUrl,
             imageUrl: link.imageUrl,
+            description: link.description || '',
+            content: link.content || '',
+            category: link.category || '',
+            author: link.author || '',
+            publishedAt: link.publishedAt,
             clicks: link.validClicks || 0,
             totalClicks: link.totalClicks || 0,
             uniqueIPs: link.uniqueIPs || 0,
@@ -235,22 +240,16 @@ router.post('/', authenticate, async (req, res) => {
         } = req.body;
         const userId = req.user._id; // Get userId from authenticated user
         
-        // Validation
-        if (!targetUrl) {
-            return res.status(400).json({
-                success: false,
-                error: 'URL đích là bắt buộc'
-            });
-        }
-        
-        // Validate URL format
-        try {
-            new URL(targetUrl);
-        } catch (e) {
-            return res.status(400).json({
-                success: false,
-                error: 'URL không hợp lệ'
-            });
+        // Validate URL format if targetUrl is provided
+        if (targetUrl) {
+            try {
+                new URL(targetUrl);
+            } catch (e) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'URL không hợp lệ'
+                });
+            }
         }
         
         // Pass all fields to service

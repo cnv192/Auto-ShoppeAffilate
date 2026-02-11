@@ -226,7 +226,7 @@ export default function UsersPage() {
                     <Avatar
                         size={40}
                         style={{
-                            background: record.role === 'admin' ? '#EE4D2D' : '#1890ff'
+                            background: record.role === 'admin' ? '#D31016' : '#1890ff'
                         }}
                         icon={record.role === 'admin' ? <CrownOutlined /> : <UserOutlined />}
                     />
@@ -362,7 +362,7 @@ export default function UsersPage() {
                     <Title level={2} style={{
                         margin: 0,
                         marginBottom: 8,
-                        color: '#EE4D2D',
+                        color: '#D31016',
                         fontSize: 24,
                         fontWeight: 600,
                         display: 'flex',
@@ -404,7 +404,7 @@ export default function UsersPage() {
                         <Statistic
                             title="Tổng người dùng"
                             value={stats.total}
-                            prefix={<TeamOutlined style={{ color: '#EE4D2D' }} />}
+                            prefix={<TeamOutlined style={{ color: '#D31016' }} />}
                         />
                     </Card>
                 </Col>
@@ -465,8 +465,8 @@ export default function UsersPage() {
                             icon={<PlusOutlined />}
                             onClick={handleAdd}
                             style={{
-                                background: '#EE4D2D',
-                                borderColor: '#EE4D2D'
+                                background: '#D31016',
+                                borderColor: '#D31016'
                             }}
                         >
                             Thêm User Đầu Tiên
@@ -479,7 +479,7 @@ export default function UsersPage() {
             <Modal
                 title={
                     <Space>
-                        <UserOutlined style={{ color: '#EE4D2D' }} />
+                        <UserOutlined style={{ color: '#D31016' }} />
                         <span>{editingUser ? 'Cập nhật người dùng' : 'Thêm người dùng mới'}</span>
                     </Space>
                 }
@@ -493,7 +493,7 @@ export default function UsersPage() {
                 width={600}
                 okText={editingUser ? 'Cập nhật' : 'Tạo mới'}
                 cancelText="Hủy"
-                okButtonProps={{ style: { background: '#EE4D2D', borderColor: '#EE4D2D' } }}
+                okButtonProps={{ style: { background: '#D31016', borderColor: '#D31016' } }}
             >
                 <Form
                     form={form}
@@ -596,7 +596,7 @@ export default function UsersPage() {
                     <Space>
                         <Avatar
                             style={{
-                                background: selectedUser?.role === 'admin' ? '#EE4D2D' : '#1890ff'
+                                background: selectedUser?.role === 'admin' ? '#D31016' : '#1890ff'
                             }}
                             icon={selectedUser?.role === 'admin' ? <CrownOutlined /> : <UserOutlined />}
                         />

@@ -40,11 +40,11 @@ export default function LoginPage() {
         }}
       >
         <div style={{ textAlign: 'center', marginBottom: 30 }}>
-          <Title level={2} style={{ color: '#EE4D2D', marginBottom: 8 }}>
-            Shopee Affiliate
+          <Title level={2} style={{ color: '#D31016', marginBottom: 8 }}>
+            Tin tức 24h
           </Title>
           <p style={{ color: '#666', fontSize: 14 }}>
-            Hệ thống quản lý chiến dịch Facebook Marketing
+            Hệ thống quản trị nội dung
           </p>
         </div>
         
@@ -89,8 +89,8 @@ export default function LoginPage() {
                 height: 45,
                 fontSize: 16,
                 fontWeight: 600,
-                background: '#EE4D2D',
-                borderColor: '#EE4D2D'
+                background: '#D31016',
+                borderColor: '#D31016'
               }}
             >
               Đăng nhập

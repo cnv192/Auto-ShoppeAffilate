@@ -45,7 +45,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ links = [] }) => {
                     hoverable
                     onMouseEnter={(e) => {
                         const target = e.currentTarget as HTMLElement;
-                        target.style.borderColor = '#EE4D2D';
+                        target.style.borderColor = '#D31016';
                         target.style.boxShadow = '0 4px 12px rgba(238, 77, 45, 0.12)';
                     }}
                     onMouseLeave={(e) => {
@@ -57,7 +57,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ links = [] }) => {
                     <Statistic
                         title={<span style={{ fontSize: 14, color: '#6b7280' }}>Tổng số Link</span>}
                         value={totalLinks}
-                        prefix={<LinkOutlined style={{ color: '#EE4D2D', fontSize: 20 }} />}
+                        prefix={<LinkOutlined style={{ color: '#D31016', fontSize: 20 }} />}
                         valueStyle={{ color: '#1a1d29', fontSize: 24, fontWeight: 600 }}
                     />
                 </Card>

@@ -23,6 +23,7 @@ const create = async (req, res) => {
             type,
             weight,
             priority,
+            displayWidth,
             mobileOnly,
             desktopOnly,
             targetArticles,
@@ -37,18 +38,31 @@ const create = async (req, res) => {
         } = req.body;
 
         // Validate required fields
-        if (!name || !imageUrl || !targetSlug) {
+        if (!name || !imageUrl) {
             return res.status(400).json({
                 success: false,
-                error: 'Missing required fields: name, imageUrl, targetSlug'
+                error: 'Missing required fields: name, imageUrl'
             });
         }
 
-        // Validate targetSlug exists (optional but recommended)
-        const linkExists = await Link.findOne({ slug: targetSlug.toLowerCase() });
-        if (!linkExists) {
-            console.warn(`⚠️ [BannerController] Target slug "${targetSlug}" not found in Links`);
+        if (!targetSlug) {
+            return res.status(400).json({
+                success: false,
+                error: 'targetSlug is required - please select an article link'
+            });
         }
+
+        // Validate targetSlug exists and get the actual target URL
+        const linkDoc = await Link.findOne({ slug: targetSlug.toLowerCase() });
+        if (!linkDoc) {
+            return res.status(400).json({
+                success: false,
+                error: `Bài viết với slug "${targetSlug}" không tồn tại`
+            });
+        }
+
+        // Use targetUrl from request body directly
+        const resolvedTargetUrl = targetUrl || `/article/${targetSlug.toLowerCase()}`;
 
         // Create banner
         const banner = new Banner({
@@ -56,10 +70,11 @@ const create = async (req, res) => {
             imageUrl,
             mobileImageUrl,
             targetSlug: targetSlug.toLowerCase(),
-            targetUrl,
+            targetUrl: resolvedTargetUrl,
             type: type || 'sticky_bottom',
             weight: weight || 50,
             priority: priority || 10,
+            displayWidth: displayWidth || 50,
             mobileOnly: mobileOnly || false,
             desktopOnly: desktopOnly || false,
             targetArticles: targetArticles || [],
@@ -89,6 +104,55 @@ const create = async (req, res) => {
         res.status(500).json({
             success: false,
             error: error.message || 'Failed to create banner'
+        });
+    }
+};
+
+/**
+ * Get all active Banners (public, for homepage)
+ * GET /api/banners/public/all
+ */
+const getAllActivePublic = async (req, res) => {
+    try {
+        const banners = await Banner.find({
+            isActive: true,
+            $or: [
+                { startDate: null },
+                { startDate: { $lte: new Date() } }
+            ]
+        }).sort({ priority: 1, weight: -1 });
+
+        // Filter out expired banners
+        const activeBanners = banners.filter(b => {
+            if (b.endDate && new Date(b.endDate) < new Date()) return false;
+            return true;
+        });
+
+        const response = activeBanners.map(banner => ({
+            id: banner._id,
+            name: banner.name,
+            imageUrl: banner.imageUrl,
+            mobileImageUrl: banner.mobileImageUrl,
+            targetSlug: banner.targetSlug,
+            targetUrl: banner.targetUrl,
+            type: banner.type,
+            displayWidth: banner.displayWidth || 50,
+            altText: banner.altText,
+            showDelay: banner.showDelay || 0,
+            autoHideAfter: banner.autoHideAfter,
+            dismissible: banner.dismissible
+        }));
+
+        res.json({
+            success: true,
+            data: response,
+            total: response.length
+        });
+    } catch (error) {
+        console.error('❌ [BannerController] GetAllActivePublic error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Failed to get banners'
         });
     }
 };
@@ -132,6 +196,7 @@ const getRandom = async (req, res) => {
             targetSlug: banner.targetSlug,
             targetUrl: banner.targetUrl,
             type: banner.type,
+            displayWidth: banner.displayWidth || 50,
             altText: banner.altText,
             showDelay: banner.showDelay,
             autoHideAfter: banner.autoHideAfter,
@@ -278,13 +343,17 @@ const update = async (req, res) => {
         // Validate targetSlug if being updated
         if (updates.targetSlug) {
             updates.targetSlug = updates.targetSlug.toLowerCase();
-            const linkExists = await Link.findOne({ slug: updates.targetSlug });
-            if (!linkExists) {
+            const linkDoc = await Link.findOne({ slug: updates.targetSlug });
+            if (!linkDoc) {
                 return res.status(400).json({
                     success: false,
-                    error: `Target slug "${updates.targetSlug}" not found`
+                    error: `Bài viết với slug "${updates.targetSlug}" không tồn tại`
                 });
             }
+        }
+        // Use targetUrl directly from the request body if provided
+        if (updates.targetUrl) {
+            // targetUrl is now managed directly on the banner
         }
 
         // Update the banner
@@ -484,6 +553,7 @@ const getActiveByType = async (req, res) => {
 
 module.exports = {
     create,
+    getAllActivePublic,
     getRandom,
     getAll,
     getById,

@@ -80,21 +80,22 @@ const LinkSchema = new Schema({
         required: true,
         trim: true,
         maxlength: 200,
-        default: 'Shopee Deal'
+        default: 'Bài viết mới'
     },
     
-    // URL đích (Shopee link)
+    // URL đích (Shopee link) - optional, managed via Banner
     targetUrl: {
         type: String,
-        required: true,
-        trim: true
+        required: false,
+        trim: true,
+        default: ''
     },
     
     // URL ảnh preview (Open Graph)
     imageUrl: {
         type: String,
         trim: true,
-        default: 'https://cf.shopee.vn/file/default_image'
+        default: ''
     },
     
     // Mô tả cho Open Graph
@@ -102,7 +103,7 @@ const LinkSchema = new Schema({
         type: String,
         trim: true,
         maxlength: 500,
-        default: 'Xem ngay deal hot trên Shopee với giá ưu đãi đặc biệt!'
+        default: ''
     },
     
     // === CONTENT - Trang bài viết ===
@@ -123,7 +124,7 @@ const LinkSchema = new Schema({
     // Tác giả
     author: {
         type: String,
-        default: 'Shopee Deals VN'
+        default: 'Tin tức 24h'
     },
     
     // Danh mục

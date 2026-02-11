@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Environment files (secrets - KHÔNG đưa vào image)
+.env
+.env.local
+.env.*.local
+
+# Dev & test files
+tests/
+test-simulation.js
+check-db.js
+CLOUDINARY_INTEGRATION_GUIDE.js
+FACEBOOK_MANAGEMENT_IMPLEMENTATION.js
+nodemon.json
+
+# Documentation
+README.md
+*.md
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Uploaded files (mounted as volume)
+uploads/*
+!uploads/.gitkeep

@@ -30,13 +30,13 @@ const createLink = async (linkData) => {
     try {
         const link = await Link.createWithAutoSlug({
             slug: customSlug,
-            title: title || 'Shopee Deal',
+            title: title || 'Bài viết mới',
             targetUrl,
-            imageUrl: imageUrl || 'https://cf.shopee.vn/file/default_image',
+            imageUrl: imageUrl || '',
             description: description || '',
             content: content || '',
-            category: category || 'Khuyến mãi',
-            author: author || 'Shopee Deals VN',
+            category: category || 'Thời sự',
+            author: author || 'Tin tức 24h',
             publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
             userId // Pass userId to the model
         });

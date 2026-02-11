@@ -409,7 +409,7 @@ export default function FacebookPage() {
                     <Title level={2} style={{
                         margin: 0,
                         marginBottom: 8,
-                        color: '#EE4D2D',
+                        color: '#D31016',
                         fontSize: 24,
                         fontWeight: 600,
                         display: 'flex',
@@ -468,8 +468,8 @@ export default function FacebookPage() {
                         <Statistic 
                             title="Tổng tài khoản" 
                             value={stats.total} 
-                            prefix={<FacebookOutlined style={{ color: '#EE4D2D' }} />}
-                            valueStyle={{ color: '#EE4D2D' }}
+                            prefix={<FacebookOutlined style={{ color: '#D31016' }} />}
+                            valueStyle={{ color: '#D31016' }}
                         />
                     </Card>
                 </Col>

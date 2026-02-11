@@ -12,22 +12,22 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL || 
-    (process.env.NODE_ENV === 'development' 
-      ? 'http://localhost:3000' 
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.NODE_ENV === 'development'
+      ? 'http://localhost:3000'
       : 'https://your-domain.com')
   ),
   title: {
-    default: 'Shoppe - News & Resources',
-    template: '%s | Shoppe',
+    default: 'Tin tức 24h - Đọc báo tin tức mới nhất trong ngày',
+    template: '%s | Tin tức 24h',
   },
-  description: 'Your trusted source for curated news and resources.',
-  keywords: ['news', 'resources', 'shoppe'],
+  description: 'Tin tức 24h - Cập nhật tin tức mới nhất 24h qua, đọc báo online với tin nóng, tin nhanh về thời sự, thế giới, kinh tế, đời sống, giải trí, thể thao, công nghệ.',
+  keywords: ['tin tức', 'tin tức 24h', 'đọc báo', 'tin mới', 'tin nóng', 'thời sự', 'báo điện tử'],
   openGraph: {
     type: 'website',
-    locale: 'en_US',
-    url: 'https://shoppe.local',
-    siteName: 'Shoppe',
+    locale: 'vi_VN',
+    url: process.env.NEXT_PUBLIC_SITE_URL || 'https://tintuc24h.vercel.app',
+    siteName: 'Tin tức 24h',
   },
   robots: {
     index: true,
@@ -35,6 +35,11 @@ export const metadata: Metadata = {
     'max-image-preview': 'large',
     'max-snippet': -1,
     'max-video-preview': -1,
+  },
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
   },
 }
 
@@ -47,7 +52,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="vi" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
-        <meta name="theme-color" content="#EE4D2D" />
+        <meta name="theme-color" content="#D31016" />
       </head>
       <body className="bg-white text-gray-900">
         <SWRProvider>

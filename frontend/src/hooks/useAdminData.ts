@@ -8,23 +8,42 @@
  */
 
 import useSWR, { mutate } from 'swr';
-import { getToken } from '@/lib/authService';
+import { getToken, logout } from '@/lib/authService';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // Fetcher function với authentication
 const fetcher = async (url: string) => {
     const token = getToken();
+
+    // Nếu không có token, redirect đến login ngay
+    if (!token) {
+        if (typeof window !== 'undefined') {
+            logout();
+            window.location.href = '/admin/login';
+        }
+        throw new Error('Chưa đăng nhập');
+    }
+
     const res = await fetch(`${API_BASE_URL}${url}`, {
         headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            'Authorization': `Bearer ${token}`
         }
     });
 
+    // Nếu token hết hạn hoặc không hợp lệ, xóa auth và redirect login
+    if (res.status === 401) {
+        if (typeof window !== 'undefined') {
+            logout();
+            window.location.href = '/admin/login';
+        }
+        throw new Error('Phiên đăng nhập hết hạn');
+    }
+
     if (!res.ok) {
-        const error = new Error('Không thể tải dữ liệu');
-        throw error;
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Không thể tải dữ liệu');
     }
 
     return res.json();

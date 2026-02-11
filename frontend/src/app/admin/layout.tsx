@@ -13,7 +13,8 @@ import {
     LogoutOutlined,
     SettingOutlined,
     FolderOutlined,
-    FileImageOutlined
+    FileImageOutlined,
+    AppstoreOutlined
 } from '@ant-design/icons';
 import { getCurrentUser, logout } from '@/lib/authService';
 import { prefetchLinks, prefetchCampaigns, prefetchDashboard } from '@/hooks/useAdminData';
@@ -43,6 +44,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         if (pathname.includes('/admin/links')) return 'links';
         if (pathname.includes('/admin/campaigns')) return 'campaigns';
         if (pathname.includes('/admin/banners')) return 'banners';
+        if (pathname.includes('/admin/categories')) return 'categories';
         if (pathname.includes('/admin/resources')) return 'resources';
         if (pathname.includes('/admin/users')) return 'users';
         if (pathname.includes('/admin/profile')) return 'profile';
@@ -71,6 +73,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 key: 'banners',
                 icon: <FileImageOutlined />,
                 label: 'Quản lý Banner'
+            },
+            {
+                key: 'categories',
+                icon: <AppstoreOutlined />,
+                label: 'Danh mục'
             },
             {
                 key: 'resources',
@@ -105,7 +112,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     useEffect(() => {
         setMounted(true);
         const currentUser = getCurrentUser();
-        
+
         // Nếu đang ở trang login
         if (pathname === '/admin/login') {
             if (currentUser) {
@@ -124,7 +131,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         } else {
             setUser(currentUser);
             setIsLoading(false);
-            
+
             // Prefetch data ngay khi login để sẵn sàng cho navigation
             // Chạy sau 100ms để không block render
             setTimeout(() => {
@@ -134,6 +141,22 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             }, 100);
         }
     }, [router, pathname]);
+
+    // Listen for user profile updates to refresh header dropdown
+    useEffect(() => {
+        const handleUserUpdated = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            if (customEvent.detail) {
+                setUser(customEvent.detail);
+            } else {
+                // Fallback: re-read from localStorage
+                const updated = getCurrentUser();
+                if (updated) setUser(updated);
+            }
+        };
+        window.addEventListener('user-updated', handleUserUpdated);
+        return () => window.removeEventListener('user-updated', handleUserUpdated);
+    }, []);
 
     // Loading state
     if (!mounted || isLoading) {
@@ -185,7 +208,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     // Nếu là trang login thì render children full screen (không có layout admin)
     if (pathname === '/admin/login') {
         if (!mounted || isLoading) {
-             return (
+            return (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
                     <Spin size="large" />
                 </div>
@@ -195,7 +218,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     }
 
     return (
-        <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #fff5f0 0%, #ffe5d9 100%)' }}>
+        <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)' }}>
             {/* Fixed Sidebar */}
             <Sider
                 breakpoint="lg"
@@ -215,7 +238,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             >
                 {/* Logo/Brand */}
                 <div style={{
-                    height: 80,
+                    height: 96,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -224,9 +247,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     fontWeight: 600,
                     background: '#ffffff',
                     borderBottom: '1px solid #f0f0f0',
-                    padding: '12px 20px'
+                    padding: '16px 20px'
                 }}>
-                    <Image src="/logo.png" alt="Logo" width={56} height={56} style={{ marginRight: 8 }} />
+                    <Image src="/logo.png" alt="Logo" width={80} height={80} style={{ marginRight: 8, height: 'auto' }} />
                 </div>
 
                 {/* Menu */}
@@ -247,7 +270,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             {/* Main Content Area */}
             <Layout style={{
                 marginLeft: 240,
-                background: 'linear-gradient(135deg, #fff5f0 0%, #ffe5d9 100%)',
+                background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
                 minHeight: '100vh'
             }}>
                 {/* Fixed Header */}
@@ -281,14 +304,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             maxWidth: 220,
                             lineHeight: '30px'
                         }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#f5f7fa'}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
                             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                         >
                             <Avatar
                                 src={user?.avatar}
                                 icon={<UserOutlined />}
                                 style={{
-                                    background: '#ff6b35',
+                                    background: '#D31016',
                                     flexShrink: 0,
                                     width: 40,
                                     height: 40,

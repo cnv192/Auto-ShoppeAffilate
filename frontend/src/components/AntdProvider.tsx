@@ -4,24 +4,24 @@ import React from 'react';
 import { ConfigProvider, App } from 'antd';
 import viVN from 'antd/locale/vi_VN';
 
-// Shopee Orange theme
+// Tin tức 24h - Red theme (matching public site)
 const theme = {
   token: {
-    colorPrimary: '#EE4D2D',
-    colorLink: '#EE4D2D',
-    colorLinkHover: '#ff7a4d',
+    colorPrimary: '#D31016',
+    colorLink: '#D31016',
+    colorLinkHover: '#b80d12',
     borderRadius: 6,
-    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   },
   components: {
     Button: {
-      colorPrimary: '#EE4D2D',
-      colorPrimaryHover: '#ff7a4d',
+      colorPrimary: '#D31016',
+      colorPrimaryHover: '#b80d12',
       algorithm: true,
     },
     Menu: {
-      itemSelectedBg: '#fff5f0',
-      itemSelectedColor: '#EE4D2D',
+      itemSelectedBg: '#fef2f2',
+      itemSelectedColor: '#D31016',
     },
   },
 };
@@ -47,7 +47,7 @@ export default function AntdProvider({ children }: { children: React.ReactNode }
           <div style={{ 
             width: 40, 
             height: 40, 
-            border: '3px solid #EE4D2D',
+            border: '3px solid #D31016',
             borderTopColor: 'transparent',
             borderRadius: '50%',
             animation: 'spin 1s linear infinite',

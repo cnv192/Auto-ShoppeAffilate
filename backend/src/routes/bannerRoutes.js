@@ -35,6 +35,12 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 router.get('/random', bannerController.getRandom);
 
 /**
+ * GET /api/banners/public/all
+ * Get all active banners for homepage display (public, no auth)
+ */
+router.get('/public/all', bannerController.getAllActivePublic);
+
+/**
  * POST /api/banners/:id/click
  * Record banner click (tracking)
  */

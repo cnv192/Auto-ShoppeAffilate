@@ -219,7 +219,7 @@ export default function LinkTable({
                         <Avatar
                             size="small"
                             icon={<UserOutlined />}
-                            style={{ backgroundColor: '#EE4D2D' }}
+                            style={{ backgroundColor: '#D31016' }}
                         />
                         <Text ellipsis style={{ maxWidth: 80 }}>
                             {userId.fullName || userId.username || 'Unknown'}
@@ -347,7 +347,7 @@ export default function LinkTable({
             <Drawer
                 title={
                     <Space>
-                        <EyeOutlined style={{ color: '#EE4D2D' }} />
+                        <EyeOutlined style={{ color: '#D31016' }} />
                         <span>Chi tiết Link</span>
                     </Space>
                 }
@@ -367,7 +367,7 @@ export default function LinkTable({
                                     maxWidth: '100%',
                                     maxHeight: 300,
                                     borderRadius: 8,
-                                    border: '2px solid #EE4D2D'
+                                    border: '2px solid #D31016'
                                 }}
                                 preview={{
                                     mask: 'Xem toàn màn'
@@ -411,7 +411,7 @@ export default function LinkTable({
                                         size="small"
                                         icon={<CopyOutlined />}
                                         onClick={() => handleCopy(selectedLink.slug)}
-                                        style={{ background: '#EE4D2D', borderColor: '#EE4D2D' }}
+                                        style={{ background: '#D31016', borderColor: '#D31016' }}
                                     >
                                         Copy
                                     </Button>
@@ -420,6 +420,7 @@ export default function LinkTable({
                         </Row>
 
                         {/* Link đích */}
+                        {selectedLink.targetUrl && (
                         <Row gutter={16} style={{ marginBottom: 16 }}>
                             <Col span={24}>
                                 <Text type="secondary" style={{ fontSize: 12 }}>LINK ĐỊA CHỈ</Text>
@@ -438,6 +439,7 @@ export default function LinkTable({
                                 </div>
                             </Col>
                         </Row>
+                        )}
 
                         {/* Thống kê */}
                         <Row gutter={16} style={{ marginBottom: 16 }}>
@@ -446,7 +448,7 @@ export default function LinkTable({
                                 <div style={{ marginTop: 4 }}>
                                     <Text
                                         strong
-                                        style={{ fontSize: 20, color: '#EE4D2D' }}
+                                        style={{ fontSize: 20, color: '#D31016' }}
                                     >
                                         {(selectedLink.clicks || 0).toLocaleString()}
                                     </Text>

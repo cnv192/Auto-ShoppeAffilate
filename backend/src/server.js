@@ -1,7 +1,7 @@
 /**
  * Main Server Entry Point
  * 
- * Shoppe Link Management System
+ * Tin tức 24h - Backend API Server
  * - Smart Routing Middleware
  * - Deep Link Redirect
  * - Admin API
@@ -28,6 +28,7 @@ const cloudinaryRoutes = require('./routes/cloudinaryRoutes');
 const userRoutes = require('./routes/userRoutes');
 const resourceSetRoutes = require('./routes/resourceSetRoutes');
 const affiliateRedirectRoutes = require('./routes/affiliateRedirectRoutes');
+const categoryRoutes = require('./routes/categoryRoutes');
 const { createSampleData } = require('./services/linkServiceMongo');
 const { ipFilterMiddleware, getDatabaseStatus } = require('./middleware/ipFilter');
 const User = require('./models/User');
@@ -138,6 +139,9 @@ app.use('/api/facebook-accounts', facebookAccountRoutes);
 // Resource Set Routes - Quản lý tập hợp tài nguyên (templates, groups, pages)
 app.use('/api/resource-sets', resourceSetRoutes);
 
+// Category Routes - Quản lý danh mục
+app.use('/api/categories', categoryRoutes);
+
 // Banner Routes - Quản lý banner quảng cáo
 const bannerRoutes = require('./routes/bannerRoutes');
 app.use('/api/banners', bannerRoutes);
@@ -235,6 +239,10 @@ const startServer = async () => {
         
         // Tạo dữ liệu mẫu trong MongoDB
         await createSampleData();
+        
+        // Seed default categories
+        const Category = require('./models/Category');
+        await Category.seedDefaults();
         
         // Tạo Admin user mặc định
         console.log('👤 Initializing default admin user...');

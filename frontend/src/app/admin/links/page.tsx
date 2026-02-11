@@ -77,7 +77,7 @@ export default function LinksPage() {
                 description: values.description || '',
                 content: values.content || '',
                 category: values.category || 'Khuyến mãi',
-                author: values.author || 'Shopee Deals VN',
+                author: values.author || 'Tin tức 24h',
                 publishedAt: values.publishedAt || new Date().toISOString()
             };
 
@@ -142,7 +142,7 @@ export default function LinksPage() {
                     <Title level={2} style={{
                         margin: 0,
                         marginBottom: 8,
-                        color: '#EE4D2D',
+                        color: '#D31016',
                         fontSize: 24,
                         fontWeight: 600,
                         display: 'flex',

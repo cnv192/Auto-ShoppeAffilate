@@ -1,7 +1,7 @@
 import { ImageResponse } from 'next/og'
 
 // Cấu hình Metadata cho ảnh
-export const alt = 'Shoppe'
+export const alt = 'Tin tức 24h'
 export const size = {
   width: 1200,
   height: 630,
@@ -27,7 +27,7 @@ export default function Image() {
           color: '#1f2937',
         }}
       >
-        Shoppe
+        Tin tức 24h
       </div>
     ),
     {

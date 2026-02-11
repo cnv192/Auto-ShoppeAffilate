@@ -3,7 +3,7 @@
  * Centralized API configuration and functions
  */
 
-import { getToken } from './authUtils'
+import { getToken, logout } from './authService'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 const API_BASE_URL_WITH_API = `${API_BASE_URL}/api`
@@ -41,6 +41,15 @@ export async function fetchApi<T>(
         ...options,
         headers,
     })
+
+    // Nếu token hết hạn hoặc không hợp lệ, xóa auth và redirect login
+    if (response.status === 401) {
+        if (typeof window !== 'undefined') {
+            logout()
+            window.location.href = '/admin/login'
+        }
+        throw new Error('Phiên đăng nhập hết hạn')
+    }
 
     if (!response.ok) {
         const data = await response.json().catch(() => ({}))

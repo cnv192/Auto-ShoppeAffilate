@@ -251,7 +251,7 @@ export default function CampaignsPage() {
                 const modes = detectCommentModes(record.commentTemplates);
                 return (
                     <div>
-                        <Text strong style={{ color: '#EE4D2D' }}>{text}</Text>
+                        <Text strong style={{ color: '#D31016' }}>{text}</Text>
                         <br />
                         <Text type="secondary" style={{ fontSize: 12 }}>
                             {record.slugs?.length || 0} links • {record.commentTemplates?.length || 0} mẫu comment
@@ -384,7 +384,7 @@ export default function CampaignsPage() {
                     <Title level={2} style={{
                         margin: 0,
                         marginBottom: 8,
-                        color: '#EE4D2D',
+                        color: '#D31016',
                         fontSize: 24,
                         fontWeight: 600,
                         display: 'flex',
@@ -429,8 +429,8 @@ export default function CampaignsPage() {
                         <Statistic
                             title="Tổng chiến dịch"
                             value={stats.total}
-                            prefix={<RocketOutlined style={{ color: '#EE4D2D' }} />}
-                            valueStyle={{ color: '#EE4D2D' }}
+                            prefix={<RocketOutlined style={{ color: '#D31016' }} />}
+                            valueStyle={{ color: '#D31016' }}
                         />
                     </Card>
                 </Col>

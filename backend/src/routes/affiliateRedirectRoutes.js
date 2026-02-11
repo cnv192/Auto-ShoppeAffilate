@@ -152,7 +152,7 @@ router.get('/go/:slug', async (req, res) => {
 ✅ [AFFILIATE REDIRECT] Redirect Executed
 ✅ ════════════════════════════════════════════════════════════
 📍 Slug:          ${slug}
-🔗 Target URL:    ${link.targetUrl.substring(0, 60)}...
+🔗 Target URL:    ${link.targetUrl ? link.targetUrl.substring(0, 60) + '...' : '/article/' + slug}
 📊 Total Clicks:  ${link.totalClicks}
 🍪 Cookie Status: ${trackingData.cookieStatus}
 ⏰ Timestamp:     ${trackingData.timestamp}
@@ -172,7 +172,12 @@ router.get('/go/:slug', async (req, res) => {
         }
 
         // Perform 302 redirect
-        return res.redirect(302, link.targetUrl);
+        if (link.targetUrl) {
+            return res.redirect(302, link.targetUrl);
+        } else {
+            // No targetUrl set, redirect to article page
+            return res.redirect(302, `/article/${slug}`);
+        }
 
     } catch (err) {
         console.error(`❌ [AFFILIATE REDIRECT] Error for slug "${slug}": ${err.message}`);

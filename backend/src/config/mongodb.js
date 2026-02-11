@@ -1,8 +1,8 @@
 /**
  * MongoDB Configuration
  * 
- * Cấu hình kết nối MongoDB Atlas
- * Database được host tại Region Hong Kong để tối ưu latency cho Việt Nam
+ * Cấu hình kết nối MongoDB local
+ * Sử dụng MongoDB chạy trên localhost hoặc Docker container
  */
 
 const mongoose = require('mongoose');
@@ -29,7 +29,7 @@ const connectMongoDB = async () => {
     }
 
     try {
-        console.log('🔄 [MongoDB] Đang kết nối đến MongoDB Atlas...');
+        console.log('🔄 [MongoDB] Đang kết nối đến MongoDB...');
 
         // Cấu hình kết nối
         const options = {
@@ -51,7 +51,7 @@ const connectMongoDB = async () => {
         await mongoose.connect(mongoURI, options);
         
         isConnected = true;
-        console.log('✅ [MongoDB] Kết nối thành công đến MongoDB Atlas');
+        console.log('✅ [MongoDB] Kết nối thành công');
         console.log(`📍 [MongoDB] Database: ${mongoose.connection.name}`);
         console.log(`📍 [MongoDB] Host: ${mongoose.connection.host}`);
 

@@ -4,15 +4,16 @@ import { Footer } from '@/components/Footer'
 import { ArticleCard } from '@/components/ArticleCard'
 import { ArticleFeatured } from '@/components/ArticleFeatured'
 import { ArticleListItem } from '@/components/ArticleListItem'
+import HomeBannerDisplay from '@/components/HomeBannerDisplay'
 import { fetchFromApi } from '@/lib/utils'
 import { Link, PaginatedResponse } from '@/lib/types'
 import { fetchOptions } from '@/config/api'
 
 export const metadata: Metadata = {
-  title: 'Báo mới - Tin tức 24h mới nhất, tin nhanh, tin nóng hàng ngày',
-  description: 'Báo mới cập nhật tin tức 24h, đọc báo online với tin nóng, tin nhanh về thời sự, thế giới, kinh tế, đời sống, giải trí, thể thao, công nghệ.',
+  title: 'Tin tức 24h - Tin tức mới nhất, tin nhanh, tin nóng hàng ngày',
+  description: 'Tin tức 24h cập nhật tin tức mới nhất, đọc báo online với tin nóng, tin nhanh về thời sự, thế giới, kinh tế, đời sống, giải trí, thể thao, công nghệ.',
   openGraph: {
-    title: 'Báo mới - Tin tức 24h mới nhất',
+    title: 'Tin tức 24h - Tin tức mới nhất',
     description: 'Tin tức 24h mới nhất, tin nhanh, tin nóng hàng ngày',
     type: 'website',
   },
@@ -43,7 +44,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-news-lightgray">
-      <Header title="Báo mới" />
+      <Header title="Tin tức 24h" />
 
       <main className="flex-grow">
         {/* Main Content Area */}
@@ -71,6 +72,11 @@ export default async function HomePage() {
                     ))}
                   </div>
                 </div>
+              </section>
+
+              {/* Banner Display - Random all banners */}
+              <section className="mb-8">
+                <HomeBannerDisplay />
               </section>
 
               {/* Main Grid + Sidebar */}

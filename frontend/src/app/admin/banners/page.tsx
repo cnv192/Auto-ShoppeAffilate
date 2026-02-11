@@ -20,7 +20,9 @@ import {
     Typography,
     Row,
     Col,
-    Statistic
+    Statistic,
+    Slider,
+    Spin
 } from 'antd';
 import {
     EditOutlined,
@@ -29,14 +31,24 @@ import {
     EyeOutlined,
     EyeInvisibleOutlined,
     ReloadOutlined,
-    PictureOutlined
+    PictureOutlined,
+    LinkOutlined
 } from '@ant-design/icons';
 import { getToken, getCurrentUser } from '@/lib/authService';
 import { getApiUrl } from '@/lib/adminApi';
 
 const { Title, Text } = Typography;
 
-// API functions
+// ===================== Banner Types (không có popup) =====================
+const bannerTypes = [
+    { value: 'sticky_bottom', label: 'Dính dưới màn hình' },
+    { value: 'center_popup', label: 'Popup giữa màn hình' },
+    { value: 'sidebar', label: 'Sidebar' },
+    { value: 'inline', label: 'Trong bài viết' },
+    { value: 'header', label: 'Header' }
+];
+
+// ===================== API =====================
 const bannerApi = {
     getAll: async () => {
         const token = getToken();
@@ -56,8 +68,9 @@ const bannerApi = {
             },
             body: JSON.stringify(data)
         });
-        if (!res.ok) throw new Error('Failed to create banner');
-        return res.json();
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Failed to create banner');
+        return json;
     },
     update: async (id: string, data: any) => {
         const token = getToken();
@@ -69,8 +82,9 @@ const bannerApi = {
             },
             body: JSON.stringify(data)
         });
-        if (!res.ok) throw new Error('Failed to update banner');
-        return res.json();
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Failed to update banner');
+        return json;
     },
     delete: async (id: string) => {
         const token = getToken();
@@ -92,17 +106,31 @@ const bannerApi = {
     }
 };
 
+const linksApi = {
+    getAll: async () => {
+        const token = getToken();
+        const res = await fetch(getApiUrl('links'), {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Failed to fetch links');
+        return res.json();
+    }
+};
+
+// ===================== Types =====================
 interface Banner {
     _id: string;
     name: string;
     imageUrl: string;
     mobileImageUrl?: string;
-    targetSlug?: string;
+    targetSlug: string;
     targetUrl?: string;
-    type: 'sticky_bottom' | 'popup' | 'center_popup' | 'sidebar' | 'inline' | 'header';
+    type: string;
     isActive: boolean;
     weight: number;
     priority: number;
+    displayWidth: number;
+    showDelay: number;
     stats?: {
         impressions: number;
         clicks: number;
@@ -112,21 +140,22 @@ interface Banner {
     [key: string]: any;
 }
 
-const bannerTypes = [
-    { value: 'sticky_bottom', label: 'Dính dưới màn hình' },
-    { value: 'popup', label: 'Popup' },
-    { value: 'center_popup', label: 'Popup giữa màn hình' },
-    { value: 'sidebar', label: 'Sidebar' },
-    { value: 'inline', label: 'Trong bài viết' },
-    { value: 'header', label: 'Header' }
-];
+interface LinkItem {
+    slug: string;
+    title: string;
+    imageUrl?: string;
+}
 
+// ===================== Component =====================
 export default function BannersPage() {
     const [banners, setBanners] = useState<Banner[]>([]);
+    const [links, setLinks] = useState<LinkItem[]>([]);
     const [loading, setLoading] = useState(false);
+    const [linksLoading, setLinksLoading] = useState(false);
     const [modalVisible, setModalVisible] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [displayWidth, setDisplayWidth] = useState(50);
     const [form] = Form.useForm();
 
     const currentUser = getCurrentUser();
@@ -144,31 +173,54 @@ export default function BannersPage() {
         }
     }, []);
 
+    const fetchLinks = useCallback(async () => {
+        try {
+            setLinksLoading(true);
+            const response = await linksApi.getAll();
+            const data = response.data || response.links || [];
+            setLinks(data.map((l: any) => ({
+                slug: l.slug,
+                title: l.title,
+                imageUrl: l.imageUrl
+            })));
+        } catch (error: any) {
+            console.error('Failed to fetch links:', error);
+        } finally {
+            setLinksLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         fetchBanners();
-    }, [fetchBanners]);
+        fetchLinks();
+    }, [fetchBanners, fetchLinks]);
 
+    // ===================== Handlers =====================
     const handleAddBanner = () => {
         setEditingId(null);
         form.resetFields();
         setImagePreview(null);
+        setDisplayWidth(50);
         setModalVisible(true);
     };
 
     const handleEditBanner = (record: Banner) => {
         setEditingId(record._id);
+        const w = record.displayWidth || 50;
         form.setFieldsValue({
             name: record.name,
             imageUrl: record.imageUrl,
-            mobileImageUrl: record.mobileImageUrl,
             targetSlug: record.targetSlug,
-            targetUrl: record.targetUrl,
+            targetUrl: record.targetUrl || '',
             type: record.type,
             weight: record.weight || 50,
-            priority: record.priority || 0,
+            priority: record.priority || 10,
+            displayWidth: w,
+            showDelay: record.showDelay || 0,
             isActive: record.isActive
         });
         setImagePreview(record.imageUrl);
+        setDisplayWidth(w);
         setModalVisible(true);
     };
 
@@ -176,15 +228,37 @@ export default function BannersPage() {
         setModalVisible(false);
         form.resetFields();
         setImagePreview(null);
+        setDisplayWidth(50);
+        setEditingId(null);
     };
 
     const handleSubmit = async (values: any) => {
         try {
             setLoading(true);
             const payload = {
-                ...values,
-                imageUrl: imagePreview || values.imageUrl
+                name: values.name,
+                imageUrl: imagePreview || values.imageUrl,
+                targetSlug: values.targetSlug,
+                targetUrl: values.targetUrl || '',
+                type: values.type,
+                weight: values.weight,
+                priority: values.priority,
+                displayWidth: values.displayWidth,
+                showDelay: values.showDelay || 0,
+                isActive: values.isActive
             };
+
+            if (!payload.targetSlug) {
+                message.error('Vui lòng chọn bài viết liên kết');
+                setLoading(false);
+                return;
+            }
+
+            if (!payload.imageUrl) {
+                message.error('Vui lòng nhập URL ảnh banner');
+                setLoading(false);
+                return;
+            }
 
             if (editingId) {
                 await bannerApi.update(editingId, payload);
@@ -197,6 +271,8 @@ export default function BannersPage() {
             setModalVisible(false);
             form.resetFields();
             setImagePreview(null);
+            setDisplayWidth(50);
+            setEditingId(null);
             fetchBanners();
         } catch (error: any) {
             message.error('Lỗi: ' + error.message);
@@ -233,38 +309,41 @@ export default function BannersPage() {
             message.error('Vui lòng nhập URL ảnh');
             return;
         }
-
         try {
             new URL(url);
             setImagePreview(url);
             form.setFieldsValue({ imageUrl: url });
-            message.success('URL ảnh được thêm thành công!');
         } catch {
             message.error('URL không hợp lệ');
         }
     };
 
-    // Stats
+    // ===================== Stats =====================
     const totalBanners = banners.length;
     const activeBanners = banners.filter(b => b.isActive).length;
     const totalImpressions = banners.reduce((sum, b) => sum + (b.stats?.impressions || 0), 0);
     const totalClicks = banners.reduce((sum, b) => sum + (b.stats?.clicks || 0), 0);
 
+    // ===================== Columns =====================
     const columns = [
         {
             title: 'Hình ảnh',
             dataIndex: 'imageUrl',
-            width: 100,
-            render: (url: string) => (
+            width: 120,
+            render: (url: string, record: Banner) => (
                 url ? (
-                    <Image
-                        src={url}
-                        alt="banner"
-                        width={80}
-                        height={60}
-                        style={{ objectFit: 'cover', borderRadius: 4 }}
-                        preview={{ mask: <EyeOutlined /> }}
-                    />
+                    <div style={{ width: 100, position: 'relative' }}>
+                        <Image
+                            src={url}
+                            alt="banner"
+                            width={100}
+                            style={{ borderRadius: 4, width: '100%', height: 'auto' }}
+                            preview={{ mask: <EyeOutlined /> }}
+                        />
+                        <Tag color="blue" style={{ position: 'absolute', bottom: 2, right: 2, margin: 0, fontSize: 10 }}>
+                            {record.displayWidth || 50}%
+                        </Tag>
+                    </div>
                 ) : (
                     <span style={{ color: '#999' }}>Không có hình</span>
                 )
@@ -273,17 +352,53 @@ export default function BannersPage() {
         {
             title: 'Tên banner',
             dataIndex: 'name',
-            width: 150,
-            ellipsis: true
+            width: 160,
+            ellipsis: true,
+            render: (name: string, record: Banner) => (
+                <Space direction="vertical" size={0}>
+                    <Text strong>{name}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                        <LinkOutlined /> /{record.targetSlug}
+                    </Text>
+                </Space>
+            )
         },
         {
             title: 'Loại',
             dataIndex: 'type',
-            width: 120,
+            width: 140,
             render: (type: string) => {
                 const typeObj = bannerTypes.find(t => t.value === type);
                 return <Tag color="blue">{typeObj?.label || type}</Tag>;
             }
+        },
+        {
+            title: 'Bài viết liên kết',
+            dataIndex: 'targetSlug',
+            width: 180,
+            ellipsis: true,
+            render: (slug: string) => {
+                const link = links.find(l => l.slug === slug);
+                return link ? (
+                    <Text style={{ fontSize: 13 }}>{link.title}</Text>
+                ) : (
+                    <Text type="secondary" style={{ fontSize: 13 }}>/{slug}</Text>
+                );
+            }
+        },
+        {
+            title: 'Tỉ lệ hiển thị',
+            dataIndex: 'displayWidth',
+            width: 100,
+            align: 'center' as const,
+            render: (w: number) => <Tag color="geekblue">{w || 50}%</Tag>
+        },
+        {
+            title: 'Delay',
+            dataIndex: 'showDelay',
+            width: 80,
+            align: 'center' as const,
+            render: (v: number) => <Tag>{v || 0}s</Tag>
         },
         {
             title: 'Trạng thái',
@@ -297,15 +412,9 @@ export default function BannersPage() {
             )
         },
         {
-            title: 'Weight',
-            dataIndex: 'weight',
-            width: 80,
-            render: (weight: number) => <span>{weight}%</span>
-        },
-        {
             title: 'Stats',
             key: 'stats',
-            width: 150,
+            width: 130,
             render: (_: any, record: Banner) => (
                 <Space direction="vertical" size={0}>
                     <Text type="secondary" style={{ fontSize: 12 }}>
@@ -320,7 +429,7 @@ export default function BannersPage() {
         {
             title: 'Hành động',
             key: 'action',
-            width: 150,
+            width: 140,
             render: (_: any, record: Banner) => (
                 <Space>
                     <Button
@@ -342,11 +451,7 @@ export default function BannersPage() {
                             cancelText="Hủy"
                             okButtonProps={{ danger: true }}
                         >
-                            <Button
-                                type="text"
-                                danger
-                                icon={<DeleteOutlined />}
-                            />
+                            <Button type="text" danger icon={<DeleteOutlined />} />
                         </Popconfirm>
                     )}
                 </Space>
@@ -369,7 +474,7 @@ export default function BannersPage() {
                     <Title level={2} style={{
                         margin: 0,
                         marginBottom: 8,
-                        color: '#EE4D2D',
+                        color: '#D31016',
                         fontSize: 24,
                         fontWeight: 600,
                         display: 'flex',
@@ -381,14 +486,14 @@ export default function BannersPage() {
                         Quản lý Banner
                     </Title>
                     <Text type="secondary" style={{ fontSize: 14 }}>
-                        Quản lý banner quảng cáo A/B testing
+                        Quản lý banner hiển thị trên trang bài viết
                     </Text>
                 </div>
 
                 <Space wrap>
                     <Button
                         icon={<ReloadOutlined />}
-                        onClick={fetchBanners}
+                        onClick={() => { fetchBanners(); fetchLinks(); }}
                         style={{ height: 40, borderRadius: 8, fontWeight: 500 }}
                     >
                         Làm mới
@@ -411,7 +516,7 @@ export default function BannersPage() {
                         <Statistic
                             title="Tổng banner"
                             value={totalBanners}
-                            prefix={<PictureOutlined style={{ color: '#EE4D2D' }} />}
+                            prefix={<PictureOutlined style={{ color: '#D31016' }} />}
                         />
                     </Card>
                 </Col>
@@ -426,18 +531,12 @@ export default function BannersPage() {
                 </Col>
                 <Col xs={12} sm={6}>
                     <Card>
-                        <Statistic
-                            title="Lượt xem"
-                            value={totalImpressions}
-                        />
+                        <Statistic title="Lượt xem" value={totalImpressions} />
                     </Card>
                 </Col>
                 <Col xs={12} sm={6}>
                     <Card>
-                        <Statistic
-                            title="Lượt click"
-                            value={totalClicks}
-                        />
+                        <Statistic title="Lượt click" value={totalClicks} />
                     </Card>
                 </Col>
             </Row>
@@ -453,22 +552,17 @@ export default function BannersPage() {
                         pagination={{ pageSize: 10 }}
                     />
                 ) : loading ? (
-                    <div style={{ textAlign: 'center', padding: '40px 0', width: '100%' }}>
-                        <Table loading={true} columns={columns} dataSource={[]} pagination={false} />
-                    </div>
+                    <Table loading={true} columns={columns} dataSource={[]} pagination={false} />
                 ) : (
                     <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                        <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
                             Chưa có banner nào
-                        </Typography.Text>
+                        </Text>
                         <Button
                             type="primary"
                             icon={<PlusOutlined />}
                             onClick={handleAddBanner}
-                            style={{
-                                background: '#EE4D2D',
-                                borderColor: '#EE4D2D'
-                            }}
+                            style={{ background: '#D31016', borderColor: '#D31016' }}
                         >
                             Thêm Banner Đầu Tiên
                         </Button>
@@ -476,13 +570,14 @@ export default function BannersPage() {
                 )}
             </Card>
 
-            {/* Add/Edit Modal */}
+            {/* ===================== Add/Edit Modal ===================== */}
             <Modal
                 title={editingId ? 'Chỉnh sửa Banner' : 'Thêm Banner Mới'}
                 open={modalVisible}
                 onCancel={handleCancel}
                 footer={null}
-                width={600}
+                width={640}
+                destroyOnClose
             >
                 <Form
                     form={form}
@@ -491,51 +586,28 @@ export default function BannersPage() {
                     initialValues={{
                         type: 'sticky_bottom',
                         weight: 50,
-                        priority: 0,
+                        priority: 10,
+                        displayWidth: 50,
+                        showDelay: 0,
                         isActive: true
                     }}
                 >
+                    {/* Tên banner */}
                     <Form.Item
                         name="name"
                         label="Tên banner"
                         rules={[{ required: true, message: 'Vui lòng nhập tên' }]}
                     >
-                        <Input placeholder="Nhập tên banner" />
+                        <Input placeholder="Nhập tên banner (nội bộ)" />
                     </Form.Item>
 
-                    <Form.Item label="Ảnh Banner">
-                        <Space.Compact style={{ width: '100%' }}>
-                            <Input
-                                placeholder="Nhập URL ảnh hoặc upload"
-                                value={imagePreview || ''}
-                                onChange={(e) => setImagePreview(e.target.value)}
-                            />
-                            <Button onClick={() => handleUrlInput(imagePreview || '')}>
-                                Xác nhận
-                            </Button>
-                        </Space.Compact>
-                        {imagePreview && (
-                            <div style={{ marginTop: 8 }}>
-                                <Image
-                                    src={imagePreview}
-                                    alt="Preview"
-                                    width={200}
-                                    style={{ borderRadius: 4 }}
-                                />
-                            </div>
-                        )}
-                    </Form.Item>
-
-                    <Form.Item name="imageUrl" hidden>
-                        <Input />
-                    </Form.Item>
-
+                    {/* Loại banner + bài viết liên kết */}
                     <Row gutter={16}>
                         <Col span={12}>
                             <Form.Item
                                 name="type"
                                 label="Loại banner"
-                                rules={[{ required: true }]}
+                                rules={[{ required: true, message: 'Vui lòng chọn loại' }]}
                             >
                                 <Select options={bannerTypes} />
                             </Form.Item>
@@ -543,26 +615,149 @@ export default function BannersPage() {
                         <Col span={12}>
                             <Form.Item
                                 name="targetSlug"
-                                label="Target Slug (Link)"
+                                label={
+                                    <Space>
+                                        <LinkOutlined />
+                                        <span>Bài viết liên kết</span>
+                                    </Space>
+                                }
+                                rules={[{ required: true, message: 'Vui lòng chọn bài viết' }]}
                             >
-                                <Input placeholder="Ví dụ: flash-sale-50" />
+                                <Select
+                                    showSearch
+                                    placeholder="Tìm và chọn bài viết..."
+                                    loading={linksLoading}
+                                    optionFilterProp="label"
+                                    filterOption={(input, option) =>
+                                        (option?.label as string || '').toLowerCase().includes(input.toLowerCase()) ||
+                                        (option?.value as string || '').toLowerCase().includes(input.toLowerCase())
+                                    }
+                                    options={links.map(l => ({
+                                        value: l.slug,
+                                        label: l.title || l.slug,
+                                    }))}
+                                    optionRender={(option) => (
+                                        <Space>
+                                            <Text ellipsis style={{ maxWidth: 200 }}>{option.label}</Text>
+                                            <Text type="secondary" style={{ fontSize: 11 }}>/{option.value}</Text>
+                                        </Space>
+                                    )}
+                                    notFoundContent={linksLoading ? <Spin size="small" /> : 'Không tìm thấy bài viết'}
+                                />
                             </Form.Item>
                         </Col>
                     </Row>
 
+                    {/* Link đích */}
+                    <Form.Item
+                        name="targetUrl"
+                        label="Link đích"
+                        extra="URL đích khi nhấp vào banner (VD: link Shopee, link affiliate...)"
+                        rules={[
+                            { type: 'url', message: 'URL không hợp lệ' }
+                        ]}
+                    >
+                        <Input placeholder="https://..." />
+                    </Form.Item>
+
+                    {/* Ảnh Banner */}
+                    <Form.Item
+                        label="Ảnh Banner"
+                        required
+                        extra="Nhập URL ảnh banner. Chiều cao sẽ tự co theo tỉ lệ gốc của ảnh"
+                    >
+                        <Space.Compact style={{ width: '100%' }}>
+                            <Input
+                                placeholder="Nhập URL ảnh banner"
+                                value={imagePreview || ''}
+                                onChange={(e) => setImagePreview(e.target.value)}
+                                onBlur={() => {
+                                    if (imagePreview) handleUrlInput(imagePreview);
+                                }}
+                            />
+                            <Button onClick={() => handleUrlInput(imagePreview || '')}>
+                                Xem trước
+                            </Button>
+                        </Space.Compact>
+                    </Form.Item>
+
+                    <Form.Item name="imageUrl" hidden>
+                        <Input />
+                    </Form.Item>
+
+                    {/* Preview ảnh với tỉ lệ displayWidth */}
+                    {imagePreview && (
+                        <div style={{
+                            marginBottom: 24,
+                            padding: 16,
+                            background: 'rgba(0,0,0,0.04)',
+                            borderRadius: 8,
+                            textAlign: 'center'
+                        }}>
+                            <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+                                Xem trước banner (tỉ lệ {displayWidth}% màn hình)
+                            </Text>
+                            <div style={{
+                                display: 'inline-block',
+                                width: `${displayWidth}%`,
+                                maxWidth: '100%',
+                                borderRadius: 8,
+                                overflow: 'hidden',
+                                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                                border: '2px solid #D31016'
+                            }}>
+                                <img
+                                    src={imagePreview}
+                                    alt="Preview"
+                                    style={{ width: '100%', height: 'auto', display: 'block' }}
+                                    onError={() => message.error('Không thể tải ảnh từ URL')}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tỉ lệ hiển thị */}
+                    <Form.Item
+                        name="displayWidth"
+                        label={`Tỉ lệ hiển thị: ${displayWidth}% chiều rộng màn hình`}
+                        extra="Chiều rộng tính theo % viewport. Chiều cao tự động co theo tỉ lệ ảnh gốc"
+                    >
+                        <Slider
+                            min={10}
+                            max={100}
+                            step={5}
+                            value={displayWidth}
+                            onChange={(v) => {
+                                setDisplayWidth(v);
+                                form.setFieldsValue({ displayWidth: v });
+                            }}
+                            marks={{
+                                10: '10%',
+                                25: '25%',
+                                50: '50%',
+                                75: '75%',
+                                100: '100%'
+                            }}
+                            tooltip={{ formatter: (v) => `${v}%` }}
+                        />
+                    </Form.Item>
+
+                    {/* Thời gian hiển thị + Priority + Active */}
                     <Row gutter={16}>
                         <Col span={8}>
                             <Form.Item
-                                name="weight"
-                                label="Weight (A/B)"
+                                name="showDelay"
+                                label="Hiển thị sau"
+                                extra="Số giây chờ trước khi hiện banner"
                             >
-                                <InputNumber min={0} max={100} style={{ width: '100%' }} />
+                                <InputNumber min={0} max={300} style={{ width: '100%' }} addonAfter="giây" />
                             </Form.Item>
                         </Col>
                         <Col span={8}>
                             <Form.Item
                                 name="priority"
                                 label="Priority"
+                                extra="Số nhỏ = ưu tiên cao"
                             >
                                 <InputNumber min={0} max={100} style={{ width: '100%' }} />
                             </Form.Item>
@@ -573,24 +768,20 @@ export default function BannersPage() {
                                 label="Trạng thái"
                                 valuePropName="checked"
                             >
-                                <Switch checkedChildren="Active" unCheckedChildren="Inactive" />
+                                <Switch checkedChildren="Bật" unCheckedChildren="Tắt" />
                             </Form.Item>
                         </Col>
                     </Row>
 
+                    {/* Submit */}
                     <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
                         <Space>
-                            <Button onClick={handleCancel}>
-                                Hủy
-                            </Button>
+                            <Button onClick={handleCancel}>Hủy</Button>
                             <Button
                                 type="primary"
                                 htmlType="submit"
                                 loading={loading}
-                                style={{
-                                    background: '#EE4D2D',
-                                    borderColor: '#EE4D2D'
-                                }}
+                                style={{ background: '#D31016', borderColor: '#D31016' }}
                             >
                                 {editingId ? 'Cập nhật' : 'Tạo mới'}
                             </Button>

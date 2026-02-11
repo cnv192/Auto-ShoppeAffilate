@@ -52,7 +52,7 @@ export default function DashboardPage() {
                     <Title level={2} style={{
                         margin: 0,
                         marginBottom: 8,
-                        color: '#EE4D2D',
+                        color: '#D31016',
                         fontSize: 24,
                         fontWeight: 600,
                         display: 'flex',
@@ -109,8 +109,8 @@ export default function DashboardPage() {
                                 <Area
                                     type="monotone"
                                     dataKey="clicks"
-                                    stroke="#EE4D2D"
-                                    fill="#EE4D2D"
+                                    stroke="#D31016"
+                                    fill="#D31016"
                                     fillOpacity={0.3}
                                 />
                             </AreaChart>

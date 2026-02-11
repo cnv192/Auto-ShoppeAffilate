@@ -38,8 +38,8 @@ export class AuthService {
     localStorage.setItem(this.tokenKey, token)
     localStorage.setItem(this.userKey, JSON.stringify(user))
     
-    // Also save to cookie for middleware auth check
-    document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Strict`
+    // Also save to cookie for middleware auth check (7 days = match JWT expiresIn)
+    document.cookie = `token=${token}; path=/; max-age=604800; SameSite=Strict`
   }
 
   clearAuthData() {
@@ -48,6 +48,19 @@ export class AuthService {
     
     // Clear cookie
     document.cookie = 'token=; path=/; max-age=0'
+  }
+
+  /**
+   * Update current user data in localStorage and notify other components
+   */
+  updateCurrentUser(updatedFields: Record<string, any>) {
+    if (typeof window === 'undefined') return
+    const current = this.getCurrentUser()
+    if (!current) return
+    const updated = { ...current, ...updatedFields }
+    localStorage.setItem(this.userKey, JSON.stringify(updated))
+    // Dispatch custom event so layout and other components can react
+    window.dispatchEvent(new CustomEvent('user-updated', { detail: updated }))
   }
 
   isAuthenticated(): boolean {
@@ -103,4 +116,8 @@ export function isAuthenticated(): boolean {
 
 export function isAdmin(): boolean {
   return authService.isAdmin()
+}
+
+export function updateCurrentUser(updatedFields: Record<string, any>) {
+  authService.updateCurrentUser(updatedFields)
 }

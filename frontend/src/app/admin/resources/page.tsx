@@ -359,7 +359,7 @@ export default function ResourcesPage() {
                     <Title level={2} style={{
                         margin: 0,
                         marginBottom: 8,
-                        color: '#EE4D2D',
+                        color: '#D31016',
                         fontSize: 24,
                         fontWeight: 600,
                         display: 'flex',
@@ -456,7 +456,7 @@ export default function ResourcesPage() {
                 cancelText="Hủy"
                 confirmLoading={submitting}
                 okButtonProps={{ 
-                    style: { background: '#EE4D2D', borderColor: '#EE4D2D' } 
+                    style: { background: '#D31016', borderColor: '#D31016' } 
                 }}
             >
                 <Form

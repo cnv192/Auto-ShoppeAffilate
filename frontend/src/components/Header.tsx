@@ -29,7 +29,7 @@ function getCurrentDateVN() {
   return `${day}, ${dateNum}/${month}/${year}`
 }
 
-export function Header({ title = 'Báo mới' }: HeaderProps) {
+export function Header({ title = 'Tin tức 24h' }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (

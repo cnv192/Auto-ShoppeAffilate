@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
 import { ArticleInteractionClient } from '@/components/ArticleInteractionClient'
+import BannerDisplay from '@/components/BannerDisplay'
 import { fetchFromApi, formatDate } from '@/lib/utils'
 import { Article, ApiResponse } from '@/lib/types'
 import { fetchOptions } from '@/config/api'
@@ -40,7 +41,7 @@ export async function generateMetadata(
 
   if (!article) {
     return {
-      title: 'Article Not Found',
+      title: 'Không tìm thấy bài viết',
     }
   }
 
@@ -180,17 +181,26 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
                 <p className="text-blue-900">
                   Full content is available on the original source. 
-                  <a
-                    href={article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-semibold hover:underline ml-1"
-                  >
-                    Read full article →
-                  </a>
+                  {article.url && (
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold hover:underline ml-1"
+                    >
+                      Read full article →
+                    </a>
+                  )}
                 </p>
               </div>
             )}
+
+            {/* Inline Banner */}
+            <BannerDisplay 
+              type="inline" 
+              articleSlug={params.slug} 
+              category={article.category} 
+            />
 
             {/* CTA Section */}
             {article.url && (
@@ -228,6 +238,34 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
       </main>
 
       <Footer />
+
+      {/* Sticky Bottom Banner */}
+      <BannerDisplay 
+        type="sticky_bottom" 
+        articleSlug={params.slug} 
+        category={article.category} 
+      />
+
+      {/* Header Banner */}
+      <BannerDisplay 
+        type="header" 
+        articleSlug={params.slug} 
+        category={article.category} 
+      />
+
+      {/* Center Popup Banner */}
+      <BannerDisplay 
+        type="center_popup" 
+        articleSlug={params.slug} 
+        category={article.category} 
+      />
+
+      {/* Sidebar Banner */}
+      <BannerDisplay 
+        type="sidebar" 
+        articleSlug={params.slug} 
+        category={article.category} 
+      />
 
       {/* Client-side interaction detection */}
       <ArticleInteractionClient isCloaked={isCloaked} />

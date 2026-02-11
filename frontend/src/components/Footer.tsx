@@ -21,9 +21,9 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* About */}
           <div className="md:col-span-2">
-            <h3 className="text-2xl font-bold text-primary-500 mb-4">Báo mới</h3>
+            <h3 className="text-2xl font-bold text-primary-500 mb-4">Tin tức 24h</h3>
             <p className="text-gray-400 text-sm leading-relaxed mb-4">
-              Báo mới - Cập nhật tin tức 24/7 với các chuyên mục đa dạng: Thời sự, Thế giới, Kinh tế,
+              Tin tức 24h - Cập nhật tin tức 24/7 với các chuyên mục đa dạng: Thời sự, Thế giới, Kinh tế,
               Giải trí, Thể thao, Công nghệ và nhiều hơn nữa. Mang đến cho bạn đọc những tin tức
               nhanh nhất, chính xác nhất.
             </p>
@@ -77,7 +77,7 @@ export function Footer() {
       {/* Bottom bar */}
       <div className="border-t border-gray-800">
         <div className="container-news py-4 flex flex-col md:flex-row items-center justify-between text-sm text-gray-400">
-          <p>&copy; {currentYear} Báo mới. Bảo lưu mọi quyền.</p>
+          <p>&copy; {currentYear} Tin tức 24h. Bảo lưu mọi quyền.</p>
           <p className="mt-2 md:mt-0">
             Giấy phép hoạt động báo chí số XXX/GP-BTTTT
           </p>

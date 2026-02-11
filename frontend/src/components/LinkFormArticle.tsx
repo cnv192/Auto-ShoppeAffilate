@@ -79,7 +79,7 @@ const titleToSlug = (title: string): string => {
     slug = slug.replace(/[^\w\s-]/g, '');
     slug = slug.trim().replace(/\s+/g, '-');
     slug = slug.replace(/-+/g, '-');
-    slug = slug.slice(0, 50);
+    slug = slug.replace(/^-|-$/g, '');
     
     return slug;
 };
@@ -104,17 +104,32 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [editorContent, setEditorContent] = useState('');
     const [isEditorMounted, setIsEditorMounted] = useState(false);
+    const [categories, setCategories] = useState<{ name: string; slug: string; color?: string }[]>([]);
+
+    // Fetch categories from API
+    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+                const res = await fetch(`${API_BASE}/api/categories/public`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.data) {
+                        setCategories(data.data);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch categories:', error);
+            }
+        };
+        fetchCategories();
+    }, []);
 
     // Reset form when modal opens/closes
     useEffect(() => {
         if (visible) {
             setPreviewImage(null);
-            setEditorContent('');
             setIsEditorMounted(false);
-            
-            setTimeout(() => {
-                setIsEditorMounted(true);
-            }, 100);
             
             if (editingLink) {
                 const imageUrl = editingLink.imageUrl || '';
@@ -122,13 +137,12 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
                 
                 form.setFieldsValue({
                     title: editingLink.title,
-                    targetUrl: editingLink.targetUrl,
                     imageUrl: imageUrl,
                     imageLinkUrl: imageLinkUrl,
                     description: editingLink.description,
                     customSlug: editingLink.slug,
-                    category: editingLink.category || 'Khuyến mãi',
-                    author: editingLink.author || 'Shopee Deals VN',
+                    category: editingLink.category || (categories.length > 0 ? categories[0].name : 'Thời sự'),
+                    author: editingLink.author || 'Tin tức 24h',
                     publishedAt: editingLink.publishedAt ? dayjs(editingLink.publishedAt) : dayjs()
                 });
                 
@@ -138,15 +152,22 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
                     setPreviewImage(imageLinkUrl);
                 }
                 
+                // Set content BEFORE mounting editor so it picks up the initial value
                 setEditorContent(editingLink.content || '');
             } else {
                 form.resetFields();
                 form.setFieldsValue({
-                    category: 'Khuyến mãi',
-                    author: 'Shopee Deals VN',
+                    category: categories.length > 0 ? categories[0].name : 'Thời sự',
+                    author: 'Tin tức 24h',
                     publishedAt: dayjs()
                 });
+                setEditorContent('');
             }
+
+            // Mount editor after content is set
+            setTimeout(() => {
+                setIsEditorMounted(true);
+            }, 150);
         } else {
             setIsEditorMounted(false);
         }
@@ -255,7 +276,7 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
         <Modal
             title={
                 <Space>
-                    <EditOutlined style={{ color: '#EE4D2D' }} />
+                    <EditOutlined style={{ color: '#D31016' }} />
                     <span>{editingLink ? 'Chỉnh sửa Bài viết' : 'Tạo Bài viết Mới'}</span>
                 </Space>
             }
@@ -287,7 +308,7 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
                             padding: '20px', 
                             borderRadius: '8px'
                         }}>
-                            <Typography.Title level={5} style={{ color: '#EE4D2D' }}>
+                            <Typography.Title level={5} style={{ color: '#D31016' }}>
                                 📋 Thông tin cơ bản
                             </Typography.Title>
                             <Divider style={{ margin: '12px 0' }} />
@@ -315,32 +336,16 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
                                     { 
                                         pattern: /^[a-zA-Z0-9_-]*$/, 
                                         message: 'Slug chỉ chứa chữ, số, dấu gạch ngang' 
-                                    },
-                                    { max: 50, message: 'Slug tối đa 50 ký tự' }
+                                    }
                                 ]}
-                                extra={<Text type="secondary" style={{ fontSize: 12 }}>Tự động tạo từ tiêu đề</Text>}
+                                extra={<Text type="secondary" style={{ fontSize: 12 }}>Tự động tạo từ tiêu đề, có thể chỉnh sửa</Text>}
                             >
                                 <Input 
                                     placeholder="khuyen-mai-flash-sale"
-                                    disabled={true}
                                     prefix="/"
-                                    style={{ background: '#f5f5f5' }}
                                 />
                             </Form.Item>
 
-                            <Form.Item
-                                name="targetUrl"
-                                label="Link đích Shopee"
-                                rules={[
-                                    { required: true, message: 'Vui lòng nhập URL đích' },
-                                    { type: 'url', message: 'URL không hợp lệ' }
-                                ]}
-                            >
-                                <TextArea 
-                                    placeholder="https://shopee.vn/..."
-                                    autoSize={{ minRows: 2, maxRows: 3 }}
-                                />
-                            </Form.Item>
 
                             <Form.Item
                                 name="description"
@@ -356,19 +361,18 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
                             <Row gutter={12}>
                                 <Col span={12}>
                                     <Form.Item name="category" label="Danh mục">
-                                        <Select>
-                                            <Select.Option value="Khuyến mãi">Khuyến mãi</Select.Option>
-                                            <Select.Option value="Flash Sale">Flash Sale</Select.Option>
-                                            <Select.Option value="Thời trang">Thời trang</Select.Option>
-                                            <Select.Option value="Điện tử">Điện tử</Select.Option>
-                                            <Select.Option value="Làm đẹp">Làm đẹp</Select.Option>
-                                            <Select.Option value="Gia dụng">Gia dụng</Select.Option>
+                                        <Select placeholder="Chọn danh mục">
+                                            {categories.map(cat => (
+                                                <Select.Option key={cat.slug} value={cat.name}>
+                                                    {cat.name}
+                                                </Select.Option>
+                                            ))}
                                         </Select>
                                     </Form.Item>
                                 </Col>
                                 <Col span={12}>
                                     <Form.Item name="author" label="Tác giả">
-                                        <Input placeholder="Shopee Deals VN" />
+                                        <Input placeholder="Tin tức 24h" />
                                     </Form.Item>
                                 </Col>
                             </Row>
@@ -404,7 +408,7 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
                                         <Spin size="small" />
                                     ) : (
                                         <Space direction="vertical" style={{ textAlign: 'center' }}>
-                                            <CloudUploadOutlined style={{ fontSize: 32, color: '#EE4D2D' }} />
+                                            <CloudUploadOutlined style={{ fontSize: 32, color: '#D31016' }} />
                                             <Text>Kéo ảnh vào đây</Text>
                                         </Space>
                                     )}
@@ -443,7 +447,7 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
 
                             {previewImage && (
                                 <div style={{
-                                    border: '2px solid #EE4D2D',
+                                    border: '2px solid #D31016',
                                     borderRadius: 8,
                                     padding: 12,
                                     position: 'relative',
@@ -493,7 +497,7 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
                             borderRadius: '8px',
                             minHeight: '600px'
                         }}>
-                            <Typography.Title level={5} style={{ color: '#EE4D2D', marginBottom: '12px' }}>
+                            <Typography.Title level={5} style={{ color: '#D31016', marginBottom: '12px' }}>
                                 ✍️ Nội dung bài viết
                             </Typography.Title>
                             <Divider style={{ margin: '0px 0 20px 0' }} />
@@ -559,8 +563,8 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
                             loading={loading}
                             size="large"
                             style={{ 
-                                background: '#EE4D2D',
-                                borderColor: '#EE4D2D',
+                                background: '#D31016',
+                                borderColor: '#D31016',
                                 minWidth: '120px'
                             }}
                         >

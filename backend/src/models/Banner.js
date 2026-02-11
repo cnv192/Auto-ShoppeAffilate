@@ -76,10 +76,10 @@ const BannerSchema = new Schema({
     // Slug của Link đích (references Link model)
     targetSlug: {
         type: String,
-        required: true,
         trim: true,
         lowercase: true,
-        index: true
+        index: true,
+        default: ''
     },
     
     // Hoặc URL đích trực tiếp (nếu không dùng Link)
@@ -89,12 +89,18 @@ const BannerSchema = new Schema({
         default: null
     },
     
-    // Loại banner
+    // Loại banner (bỏ popup, giữ các loại khác)
     type: {
         type: String,
-        enum: ['sticky_bottom', 'popup', 'center_popup', 'sidebar', 'inline', 'header'],
+        enum: ['sticky_bottom', 'center_popup', 'sidebar', 'inline', 'header'],
         default: 'sticky_bottom',
         index: true
+    },
+    
+    // Thứ tự ưu tiên (số nhỏ = ưu tiên cao)
+    priority: {
+        type: Number,
+        default: 10
     },
     
     // Banner có đang hoạt động không
@@ -113,10 +119,13 @@ const BannerSchema = new Schema({
         max: 100
     },
     
-    // Thứ tự ưu tiên (số nhỏ = ưu tiên cao)
-    priority: {
+    // Tỉ lệ hiển thị chiều rộng (% so với viewport, 1-100)
+    // Chiều cao tự co theo tỉ lệ ảnh gốc
+    displayWidth: {
         type: Number,
-        default: 10
+        default: 50,
+        min: 1,
+        max: 100
     },
     
     // === TARGETING OPTIONS ===

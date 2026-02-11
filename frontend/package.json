@@ -1,7 +1,7 @@
 {
-  "name": "shoppe-frontend-next",
+  "name": "tintuc24h-frontend",
   "version": "1.0.0",
-  "description": "Next.js 14+ frontend for Shoppe - Public News Site & Admin Dashboard",
+  "description": "Next.js 14+ frontend for Tin tức 24h - Trang tin tức & Quản trị",
   "private": true,
   "scripts": {
     "dev": "next dev",
