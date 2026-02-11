@@ -15,7 +15,6 @@ const cors = require('cors');
 const path = require('path');
 const bodyParser = require('body-parser');
 
-const { connectRedis } = require('./config/redis');
 const { connectMongoDB, getConnectionStatus } = require('./config/mongodb');
 const linkRoutes = require('./routes/linkRoutes');
 const redirectRoutes = require('./routes/redirectRoutes');
@@ -233,9 +232,6 @@ const startServer = async () => {
     try {
         // Kết nối MongoDB Atlas
         await connectMongoDB();
-        
-        // Kết nối Redis (optional - cho rate limiting)
-        await connectRedis();
         
         // Tạo dữ liệu mẫu trong MongoDB
         await createSampleData();

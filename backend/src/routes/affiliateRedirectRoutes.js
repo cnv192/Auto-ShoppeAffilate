@@ -209,7 +209,6 @@ router.get('/go/:slug', async (req, res) => {
  */
 router.get('/stats', (req, res) => {
     const mongoose = require('mongoose');
-    const { getRedisStatus } = require('../config/redis');
     
     res.json({
         server: 'Shoppe Backend (Unified)',
@@ -218,7 +217,6 @@ router.get('/stats', (req, res) => {
         affiliateRequests: affiliateRequestCount,
         environment: process.env.NODE_ENV || 'development',
         mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-        redis: getRedisStatus(),
         timestamp: new Date().toISOString()
     });
 });

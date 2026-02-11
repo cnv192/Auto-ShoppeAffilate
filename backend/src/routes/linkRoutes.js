@@ -9,7 +9,6 @@
 const express = require('express');
 const router = express.Router();
 const linkService = require('../services/linkServiceMongo');
-const { getClickCount } = require('../middleware/smartRouting');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const Link = require('../models/Link');
 

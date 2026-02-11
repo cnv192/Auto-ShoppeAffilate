@@ -9,10 +9,9 @@
  * Tích hợp:
  * - IP2Location: Kiểm tra IP từ sample.bin.db11
  * - MongoDB: Lưu trữ và tracking clicks
- * - Redis: Rate limiting và cache
+ * - In-memory Map: Rate limiting
  */
 
-const { redisClient } = require('../config/redis');
 const { analyzeIP, getClientIP: getIPFromFilter } = require('./ipFilter');
 
 // Danh sách các User-Agent của bot preview các nền tảng mạng xã hội
@@ -103,78 +102,42 @@ const getDeviceType = (userAgent) => {
 };
 
 /**
- * Lưu thông tin truy cập vào Redis (backup/cache)
- * @param {string} ip - IP của người dùng
- * @param {string} slug - Slug của link được truy cập
- * @param {boolean} isValid - Click có hợp lệ không
+ * Rate limiting đơn giản bằng in-memory Map
+ * Không cần Redis - phù hợp cho single-instance deployment
  */
-const trackVisitRedis = async (ip, slug, isValid = true) => {
-    try {
-        if (!redisClient.isReady) return;
-        
-        const today = new Date().toISOString().split('T')[0];
-        
-        // Tăng counter tổng
-        await redisClient.incr(`clicks:${slug}:total`);
-        
-        // Tăng counter hợp lệ nếu valid
-        if (isValid) {
-            await redisClient.incr(`clicks:${slug}:valid`);
+const rateLimitMap = new Map();
+
+// Dọn dẹp rateLimitMap mỗi 5 phút
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, data] of rateLimitMap.entries()) {
+        if (now - data.startTime > 60000) {
+            rateLimitMap.delete(key);
         }
-        
-        // Counter theo ngày
-        await redisClient.incr(`clicks:${slug}:${today}`);
-        
-        // TTL 30 ngày
-        await redisClient.expire(`clicks:${slug}:${today}`, 30 * 24 * 60 * 60);
-        
-    } catch (error) {
-        console.error('Error tracking to Redis:', error);
     }
-};
+}, 5 * 60 * 1000);
 
 /**
- * Lấy số click của một link từ Redis
- * @param {string} slug - Slug của link
- * @returns {Object} - Số click { total, valid }
- */
-const getClickCount = async (slug) => {
-    try {
-        if (!redisClient.isReady) return { total: 0, valid: 0 };
-        
-        const total = await redisClient.get(`clicks:${slug}:total`);
-        const valid = await redisClient.get(`clicks:${slug}:valid`);
-        
-        return {
-            total: parseInt(total) || 0,
-            valid: parseInt(valid) || 0
-        };
-    } catch (error) {
-        console.error('Error getting click count:', error);
-        return { total: 0, valid: 0 };
-    }
-};
-
-/**
- * Kiểm tra rate limiting (chống spam click)
+ * Kiểm tra rate limiting (chống spam click) - In-memory
  * @param {string} ip - IP của người dùng
  * @param {string} slug - Slug của link
  * @returns {boolean} - true nếu vượt quá giới hạn
  */
 const isRateLimited = async (ip, slug) => {
     try {
-        if (!redisClient.isReady) return false;
+        const key = `${ip}:${slug}`;
+        const now = Date.now();
+        const data = rateLimitMap.get(key);
         
-        const key = `ratelimit:${ip}:${slug}`;
-        const count = await redisClient.incr(key);
-        
-        if (count === 1) {
-            // Set TTL 1 phút cho lần đầu
-            await redisClient.expire(key, 60);
+        if (!data || now - data.startTime > 60000) {
+            // Tạo mới hoặc reset sau 1 phút
+            rateLimitMap.set(key, { count: 1, startTime: now });
+            return false;
         }
         
+        data.count++;
         // Giới hạn 10 request/phút cho mỗi IP trên mỗi link
-        return count > 10;
+        return data.count > 10;
         
     } catch (error) {
         console.error('Error checking rate limit:', error);
@@ -250,9 +213,6 @@ const smartRoutingMiddleware = async (req, res, next) => {
         city: ipAnalysis.details.city || ''
     };
     
-    // === BƯỚC 5: Track vào Redis (backup) ===
-    await trackVisitRedis(clientIP, slug, isValidClick);
-    
     next();
 };
 
@@ -262,7 +222,5 @@ module.exports = {
     getClientIP,
     getDeviceType,
     isRateLimited,
-    getClickCount,
-    trackVisitRedis,
     PREVIEW_BOTS
 };
