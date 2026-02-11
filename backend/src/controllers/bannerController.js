@@ -173,6 +173,12 @@ const getAll = async (req, res) => {
         if (type) query.type = type;
         if (isActive !== undefined) query.isActive = isActive === 'true';
 
+        // Filter by user ownership if not admin
+        // ✅ Non-admin users only see their own banners
+        if (req.user.role !== 'admin') {
+            query.createdBy = req.user._id;
+        }
+
         // Pagination
         const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -181,7 +187,7 @@ const getAll = async (req, res) => {
                 .sort({ priority: 1, createdAt: -1 })
                 .skip(skip)
                 .limit(parseInt(limit))
-                .populate('createdBy', 'username'),
+                .populate('createdBy', 'username fullName email'),
             Banner.countDocuments(query)
         ]);
 
@@ -251,20 +257,8 @@ const update = async (req, res) => {
         delete updates.createdAt;
         delete updates.updatedAt;
 
-        // Validate targetSlug if being updated
-        if (updates.targetSlug) {
-            updates.targetSlug = updates.targetSlug.toLowerCase();
-            const linkExists = await Link.findOne({ slug: updates.targetSlug });
-            if (!linkExists) {
-                console.warn(`⚠️ [BannerController] Target slug "${updates.targetSlug}" not found`);
-            }
-        }
-
-        const banner = await Banner.findByIdAndUpdate(
-            id,
-            { $set: updates },
-            { new: true, runValidators: true }
-        );
+        // Find the banner to check ownership
+        const banner = await Banner.findById(id);
 
         if (!banner) {
             return res.status(404).json({
@@ -273,11 +267,38 @@ const update = async (req, res) => {
             });
         }
 
-        console.log(`✅ [BannerController] Banner updated: ${banner.name}`);
+        // Allow admin to update any banner, otherwise check for ownership
+        if (req.user.role !== 'admin' && banner.createdBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                error: 'You do not have permission to update this banner'
+            });
+        }
+
+        // Validate targetSlug if being updated
+        if (updates.targetSlug) {
+            updates.targetSlug = updates.targetSlug.toLowerCase();
+            const linkExists = await Link.findOne({ slug: updates.targetSlug });
+            if (!linkExists) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Target slug "${updates.targetSlug}" not found`
+                });
+            }
+        }
+
+        // Update the banner
+        const updatedBanner = await Banner.findByIdAndUpdate(
+            id,
+            { $set: updates },
+            { new: true, runValidators: true }
+        );
+
+        console.log(`✅ [BannerController] Banner updated: ${updatedBanner.name}`);
 
         res.json({
             success: true,
-            data: banner,
+            data: updatedBanner,
             message: 'Banner updated successfully'
         });
 
@@ -298,7 +319,7 @@ const remove = async (req, res) => {
     try {
         const { id } = req.params;
 
-        const banner = await Banner.findByIdAndDelete(id);
+        const banner = await Banner.findById(id);
 
         if (!banner) {
             return res.status(404).json({
@@ -306,6 +327,16 @@ const remove = async (req, res) => {
                 error: 'Banner not found'
             });
         }
+
+        // ✅ Allow admin to delete any banner, otherwise check for ownership
+        if (req.user.role !== 'admin' && banner.createdBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                error: 'You do not have permission to delete this banner'
+            });
+        }
+
+        await Banner.findByIdAndDelete(id);
 
         console.log(`🗑️ [BannerController] Banner deleted: ${banner.name}`);
 
@@ -337,6 +368,14 @@ const toggleActive = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 error: 'Banner not found'
+            });
+        }
+
+        // ✅ Allow admin to toggle any banner, otherwise check for ownership
+        if (req.user.role !== 'admin' && banner.createdBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                error: 'You do not have permission to toggle this banner'
             });
         }
 

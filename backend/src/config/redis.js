@@ -44,4 +44,12 @@ const connectRedis = async () => {
     }
 };
 
-module.exports = { redisClient, connectRedis };
+// Lấy trạng thái Redis
+const getRedisStatus = () => {
+    if (!redisClient) return 'not-initialized';
+    if (redisClient.isOpen) return 'connected';
+    if (redisClient.isReady) return 'ready';
+    return 'disconnected';
+};
+
+module.exports = { redisClient, connectRedis, getRedisStatus };

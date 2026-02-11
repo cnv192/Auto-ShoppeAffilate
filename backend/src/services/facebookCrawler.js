@@ -1,106 +1,125 @@
-/**
- * Facebook Crawler Service
- * 
- * A robust solution for modern Facebook architecture that handles:
- * 1. Modern Request Headers (The "Mask") - Avoid WAP detection
- * 2. Advanced URL Resolver (The "Navigator") - Handle redirects
- * 3. Smart Parsing Strategy (The "Extractor") - Extract data reliably
- * 
- * @author Senior Automation Architect
- * @version 2.0.0
- */
+const axios = require('axios');
 
-// ==============================================
-// SECTION 1: MODERN HEADERS CONFIGURATION
-// ==============================================
+// Giả lập Headers Mobile để vào mbasic
+const getHeaders = (cookie) => ({
+    'authority': 'mbasic.facebook.com',
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'accept-language': 'en-US,en;q=0.9,vi;q=0.8',
+    'cache-control': 'max-age=0',
+    'cookie': cookie,
+    'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    'sec-ch-ua-mobile': '?1',
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'none',
+    'sec-fetch-user': '?1',
+    'upgrade-insecure-requests': '1',
+    'user-agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+});
 
 /**
- * Modern Browser Headers to bypass WAP/Mobile detection
- * Updated for Chrome 120+ on Windows 10/11
+ * Cào danh sách Page từ mbasic.facebook.com
  */
-const MODERN_HEADERS = {
-    // Desktop Chrome - Primary (for standard crawling)
-    desktop: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-        'Connection': 'keep-alive'
-    },
+async function fetchPagesViaCookie(cookie) {
+    console.log('🔍 [Crawler] Bắt đầu quét Fanpage từ Cookie...');
     
-    // Mobile Basic Chrome - For mbasic.facebook.com parsing (server-side HTML)
-    mbasic: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?1',
-        'Sec-Ch-Ua-Platform': '"Android"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1'
-    },
-    
-    // iPhone Safari - Alternative mobile profile
-    ios: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br'
-    },
-    
-    // AJAX/XHR requests
-    xhr: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin'
+    try {
+        // 1. Gọi vào trang danh sách Page của mbasic
+        const response = await axios.get('https://mbasic.facebook.com/pages/?owned', {
+            headers: getHeaders(cookie),
+            maxRedirects: 5
+        });
+
+        const html = response.data;
+        
+        // Debug: Kiểm tra xem có bị đá về Login không
+        if (html.includes('login_form') || html.includes('Đăng nhập')) {
+            console.error('❌ [Crawler] Cookie chết hoặc bị redirect về trang login!');
+            return [];
+        }
+
+        console.log(`📄 [Crawler] Đã tải HTML (${html.length} bytes). Đang phân tích...`);
+
+        const pages = [];
+        const uniqueIds = new Set();
+
+        // --- CÁCH 1: Tìm qua link "page_id=" (Thường thấy ở nút Insights/Edit) ---
+        // Pattern: /pages/insights/?page_id=123456789
+        const regexId = /[?&]page_id=(\d+)/g;
+        let match;
+        
+        // Chúng ta sẽ quét qua từng dòng HTML chứa link để chính xác hơn
+        const links = html.match(/<a[^>]+href="[^"]+"[^>]*>.*?<\/a>/g) || [];
+        
+        console.log(`🔎 [Crawler] Tìm thấy ${links.length} thẻ <a> trong HTML`);
+
+        for (const linkHtml of links) {
+            // Thử tìm ID trong link
+            const idMatch = linkHtml.match(/[?&]page_id=(\d+)/);
+            
+            if (idMatch) {
+                const pageId = idMatch[1];
+                
+                // Bỏ qua nếu đã lấy rồi
+                if (uniqueIds.has(pageId)) continue;
+
+                // Cố gắng trích xuất tên Page từ text bên trong thẻ a (hoặc thẻ a ngay trước đó)
+                // Đây là heuristic: Link chứa page_id thường là nút phụ, tên page nằm ở link chính
+                // Tuy nhiên, để đơn giản, ta cứ lưu ID trước.
+                
+                // Mẹo: Trên mbasic, cấu trúc thường là:
+                // <img src="..."> <span>Tên Page</span> ... <a href="...page_id=...">Insights</a>
+                
+                pages.push({
+                    pageId: pageId,
+                    name: `Page ${pageId}`, // Tên tạm, sẽ update sau nếu tìm thấy
+                    category: 'Fanpage',
+                    picture: `https://graph.facebook.com/${pageId}/picture?type=square`
+                });
+                uniqueIds.add(pageId);
+            }
+        }
+
+        // --- CÁCH 2: Regex vét cạn (Backup) ---
+        // Tìm các link dạng /Name-Page-123456789?refid=...
+        const regexV2 = /href="\/([^\/"]+)-(\d+)\?refid=17"/g;
+        let matchV2;
+        while ((matchV2 = regexV2.exec(html)) !== null) {
+            const pageId = matchV2[2];
+            const rawName = matchV2[1];
+            
+            if (!uniqueIds.has(pageId)) {
+                // Decode tên page (VD: Shop-Quan-Ao -> Shop Quan Ao)
+                const name = rawName.replace(/-/g, ' ');
+                
+                pages.push({
+                    pageId: pageId,
+                    name: name,
+                    category: 'Fanpage',
+                    picture: `https://graph.facebook.com/${pageId}/picture?type=square`
+                });
+                uniqueIds.add(pageId);
+            }
+        }
+
+        console.log(`✅ [Crawler] Kết quả: Tìm thấy ${pages.length} Fanpage.`);
+        if (pages.length > 0) {
+            console.log('📋 Danh sách ID:', pages.map(p => p.pageId).join(', '));
+        } else {
+            console.log('⚠️ [Crawler] Không tìm thấy page nào. Có thể do Regex lỗi hoặc User không có Page.');
+            // Uncomment dòng dưới để debug HTML nếu cần
+            // console.log(html); 
+        }
+
+        return pages;
+
+    } catch (error) {
+        console.error('❌ [Crawler] Lỗi request:', error.message);
+        return [];
     }
-};
-
-/**
- * Get headers for a specific profile with optional cookie
- * @param {String} profile - 'desktop', 'mbasic', 'ios', 'xhr'
- * @param {String} cookie - Optional Facebook cookie string
- * @param {Object} extraHeaders - Additional headers to merge
- * @returns {Object} - Complete headers object
- */
-function getHeaders(profile = 'desktop', cookie = '', extraHeaders = {}) {
-    const baseHeaders = MODERN_HEADERS[profile] || MODERN_HEADERS.desktop;
-    
-    const headers = {
-        ...baseHeaders,
-        ...extraHeaders
-    };
-    
-    if (cookie) {
-        headers['Cookie'] = cookie;
-    }
-    
-    return headers;
 }
 
-// ==============================================
-// SECTION 2: ADVANCED URL RESOLVER
-// ==============================================
+module.exports = { fetchPagesViaCookie };
 
 /**
  * Advanced Facebook URL Resolver
@@ -1040,6 +1059,115 @@ class FacebookCrawler {
     }
     
     /**
+     * Fetch managed Fanpages from mbasic.facebook.com/pages/?owned
+     * Scrapes the owned pages list and extracts pageId and name
+     * 
+     * @returns {Promise<Array>} - Array of pages: [{ pageId, name }, ...]
+     */
+    async fetchPagesViaCookie() {
+        try {
+            console.log('📖 [FacebookCrawler] Fetching managed pages via cookie...');
+            
+            if (!this.cookie) {
+                console.warn('⚠️  [FacebookCrawler] No cookie available');
+                return [];
+            }
+            
+            const url = 'https://mbasic.facebook.com/pages/?owned';
+            const headers = getHeaders('mbasic', this.cookie);
+            
+            console.log(`📡 [FacebookCrawler] Requesting: ${url}`);
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers,
+                timeout: 15000
+            });
+            
+            if (!response.ok) {
+                console.error(`❌ [FacebookCrawler] HTTP ${response.status}: ${response.statusText}`);
+                return [];
+            }
+            
+            const html = await response.text();
+            console.log(`✅ [FacebookCrawler] Received ${html.length} bytes of HTML`);
+            
+            // Parse pages from HTML
+            const pages = [];
+            
+            // Pattern 1: Extract from page list links
+            // Format: /[PAGE_NAME]/PAGE_ID/?...
+            const pagePattern = /<a[^>]*href="\/([^"]+)\/(\d+)\/?"[^>]*>(.*?)<\/a>/gi;
+            let match;
+            
+            while ((match = pagePattern.exec(html)) !== null) {
+                try {
+                    const pageSlug = match[1];
+                    const pageId = match[2];
+                    const nameText = match[3];
+                    
+                    // Extract clean name from text (remove HTML entities and tags)
+                    const name = nameText
+                        .replace(/<[^>]*>/g, '')
+                        .replace(/&[^;]+;/g, '')
+                        .trim();
+                    
+                    // Filter out non-page entries
+                    if (pageId && name && !['home', 'messages', 'notifications'].includes(pageSlug.toLowerCase())) {
+                        pages.push({
+                            pageId,
+                            name,
+                            picture: null,
+                            category: null
+                        });
+                        console.log(`   ✓ Found page: ${name} (${pageId})`);
+                    }
+                } catch (e) {
+                    console.error(`   ⚠️  Error parsing page:`, e.message);
+                }
+            }
+            
+            // Pattern 2: Extract from direct page list divs/sections
+            // Mbasic sometimes uses different HTML structures
+            const pageTablePattern = /<a[^>]*href="\/pages\/[^"]*"[^>]*>.*?<\/a>/gi;
+            const matches = html.match(pageTablePattern) || [];
+            
+            for (const pageLink of matches) {
+                try {
+                    // Extract page ID from href
+                    const idMatch = pageLink.match(/\/(\d{8,20})/);
+                    const nameMatch = pageLink.match(/>([^<]+)<\/a>/);
+                    
+                    if (idMatch && nameMatch) {
+                        const pageId = idMatch[1];
+                        const name = nameMatch[1].trim();
+                        
+                        // Check if not already added
+                        if (!pages.find(p => p.pageId === pageId)) {
+                            pages.push({
+                                pageId,
+                                name,
+                                picture: null,
+                                category: null
+                            });
+                            console.log(`   ✓ Found page (alt): ${name} (${pageId})`);
+                        }
+                    }
+                } catch (e) {
+                    console.error(`   ⚠️  Error parsing page (alt):`, e.message);
+                }
+            }
+            
+            console.log(`📊 [FacebookCrawler] Found ${pages.length} managed pages`);
+            return pages;
+            
+        } catch (error) {
+            console.error('❌ [FacebookCrawler] fetchPagesViaCookie error:', error);
+            return [];
+        }
+    }
+
+    /**
      * Make an authenticated request to Facebook
      * @param {String} url - Target URL
      * @param {Object} options - Fetch options
@@ -1064,20 +1192,4 @@ class FacebookCrawler {
     }
 }
 
-// ==============================================
-// EXPORTS
-// ==============================================
-
-module.exports = {
-    // Headers
-    MODERN_HEADERS,
-    getHeaders,
-    
-    // Classes
-    FacebookUrlResolver,
-    MbasicParser,
-    FacebookCrawler,
-    
-    // Convenience factory
-    createCrawler: (cookie) => new FacebookCrawler(cookie)
-};
+module.exports = { fetchPagesViaCookie };

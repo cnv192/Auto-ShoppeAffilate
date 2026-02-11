@@ -59,6 +59,11 @@ const userSchema = new mongoose.Schema({
         match: [/^[0-9]{10,11}$/, 'Số điện thoại không hợp lệ']
     },
 
+    avatar: {
+        type: String,
+        trim: true
+    },
+
     isActive: {
         type: Boolean,
         default: true
@@ -102,7 +107,6 @@ const userSchema = new mongoose.Schema({
 // INDEXES
 // ============================================
 
-userSchema.index({ username: 1 });
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ createdAt: -1 });
@@ -111,7 +115,7 @@ userSchema.index({ createdAt: -1 });
 // MIDDLEWARE - Hash password trước khi lưu
 // ============================================
 
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
     // Chỉ hash password nếu password được modify
     if (!this.isModified('password')) {
         return next();
@@ -120,10 +124,10 @@ userSchema.pre('save', async function(next) {
     try {
         // Generate salt
         const salt = await bcrypt.genSalt(10);
-        
+
         // Hash password
         this.password = await bcrypt.hash(this.password, salt);
-        
+
         next();
     } catch (error) {
         next(error);
@@ -139,7 +143,7 @@ userSchema.pre('save', async function(next) {
  * @param {String} candidatePassword - Password người dùng nhập vào
  * @returns {Boolean} - true nếu password đúng
  */
-userSchema.methods.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
     try {
         return await bcrypt.compare(candidatePassword, this.password);
     } catch (error) {
@@ -151,7 +155,7 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
  * Kiểm tra user có phải Admin không
  * @returns {Boolean}
  */
-userSchema.methods.isAdmin = function() {
+userSchema.methods.isAdmin = function () {
     return this.role === 'admin';
 };
 
@@ -159,7 +163,7 @@ userSchema.methods.isAdmin = function() {
  * Cập nhật thông tin last login
  * @param {String} ip - IP address
  */
-userSchema.methods.updateLastLogin = async function(ip) {
+userSchema.methods.updateLastLogin = async function (ip) {
     this.lastLogin = new Date();
     this.lastLoginIP = ip;
     await this.save();
@@ -169,7 +173,7 @@ userSchema.methods.updateLastLogin = async function(ip) {
  * Cập nhật stats
  * @param {Object} stats - { totalLinks, totalClicks, totalCampaigns }
  */
-userSchema.methods.updateStats = async function(stats) {
+userSchema.methods.updateStats = async function (stats) {
     if (stats.totalLinks !== undefined) {
         this.stats.totalLinks = stats.totalLinks;
     }
@@ -186,7 +190,7 @@ userSchema.methods.updateStats = async function(stats) {
  * Get safe user object (không bao gồm password)
  * @returns {Object}
  */
-userSchema.methods.toSafeObject = function() {
+userSchema.methods.toSafeObject = function () {
     const obj = this.toObject();
     delete obj.password;
     return obj;
@@ -202,14 +206,14 @@ userSchema.methods.toSafeObject = function() {
  * @param {String} password - Default: '123456'
  * @returns {User}
  */
-userSchema.statics.createDefaultAdmin = async function(
+userSchema.statics.createDefaultAdmin = async function (
     username = 'admin',
     password = '123456'
 ) {
     try {
         // Check xem admin đã tồn tại chưa
         const existingAdmin = await this.findOne({ username });
-        
+
         if (existingAdmin) {
             console.log('✅ Admin user đã tồn tại');
             return existingAdmin;
@@ -241,7 +245,7 @@ userSchema.statics.createDefaultAdmin = async function(
  * @param {String} username
  * @returns {User}
  */
-userSchema.statics.findByUsername = async function(username) {
+userSchema.statics.findByUsername = async function (username) {
     return await this.findOne({ username }).select('+password');
 };
 
@@ -250,7 +254,7 @@ userSchema.statics.findByUsername = async function(username) {
  * @param {Object} options - { page, limit, role, isActive }
  * @returns {Object} - { users, total, page, pages }
  */
-userSchema.statics.getAllUsers = async function(options = {}) {
+userSchema.statics.getAllUsers = async function (options = {}) {
     const {
         page = 1,
         limit = 20,
@@ -259,11 +263,11 @@ userSchema.statics.getAllUsers = async function(options = {}) {
     } = options;
 
     const query = {};
-    
+
     if (role) {
         query.role = role;
     }
-    
+
     if (isActive !== undefined) {
         query.isActive = isActive;
     }

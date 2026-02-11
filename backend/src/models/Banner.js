@@ -92,7 +92,7 @@ const BannerSchema = new Schema({
     // Loại banner
     type: {
         type: String,
-        enum: ['sticky_bottom', 'popup', 'sidebar', 'inline', 'header'],
+        enum: ['sticky_bottom', 'popup', 'center_popup', 'sidebar', 'inline', 'header'],
         default: 'sticky_bottom',
         index: true
     },

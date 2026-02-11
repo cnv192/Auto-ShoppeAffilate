@@ -12,30 +12,34 @@ const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const { authenticate } = require('../middleware/auth');
 
-// Configure Cloudinary
+// Configure Cloudinary from environment variables
 cloudinary.config({
-    cloud_name: 'do169bkba',
-    api_key: '138946517721673',
-    api_secret: 'IBWgMzVI_l6JMFZ5U3Ta5Brs6zc'
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 // Configure Cloudinary Storage for Multer
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: async (req, file) => {
+        // Get folder from request body or query
+        let folder = req.body.folder || req.query.folder || 'general';
+        
         // Determine resource type
         let resourceType = 'image';
-        let folder = 'hotnews/images';
         
         if (file.mimetype.startsWith('video/')) {
             resourceType = 'video';
-            folder = 'hotnews/videos';
         }
         
+        // Add 'shoppe' prefix to all folders
+        const fullFolder = `shoppe/${folder}`;
+        
         return {
-            folder: folder,
+            folder: fullFolder,
             resource_type: resourceType,
-            allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'avi', 'webm'],
+            allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'avi', 'webm', 'ogg'],
             transformation: resourceType === 'image' ? [
                 { width: 1200, height: 1200, crop: 'limit' },
                 { quality: 'auto', fetch_format: 'auto' }
@@ -70,10 +74,13 @@ const upload = multer({
  * POST /api/upload
  * Upload single file to Cloudinary
  * 
+ * Query/Body params:
+ * - folder: Destination folder (e.g., 'banners', 'articles/covers', 'articles/inline')
+ * 
  * Requires authentication
  * Returns Cloudinary URL
  */
-router.post('/', authenticate, upload.single('file'), async (req, res) => {
+router.post('/', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -88,13 +95,16 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
         // Build optimized URL
         let optimizedUrl = file.path;
         
-        // For images, add auto optimization params
+        // For images, ensure optimization params are present
         if (!isVideo && file.path.includes('cloudinary.com')) {
-            // Insert transformation params for images
-            optimizedUrl = file.path.replace(
-                '/upload/',
-                '/upload/f_auto,q_auto/'
-            );
+            // Check if transformation params exist
+            if (!file.path.includes('/upload/') || !file.path.match(/\/upload\/[^/]*[a-z]/)) {
+                // Insert transformation params for images
+                optimizedUrl = file.path.replace(
+                    '/upload/',
+                    '/upload/f_auto,q_auto/'
+                );
+            }
         }
 
         return res.json({

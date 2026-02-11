@@ -1,1066 +1,716 @@
-# 🛍️ Shoppe Link Management System
+# 🛒 SHOPPE - LINK MANAGEMENT & FACEBOOK MARKETING AUTOMATION SYSTEM
 
-## Mục Đích Dự Án
-
-Hệ thống quản lý liên kết thông minh cho Shopee Marketing với các tính năng:
-- **Smart Routing**: Tự động xác định loại request (Bot/User) và trả về dữ liệu phù hợp
-- **Deep Linking**: Hỗ trợ chuyển hướng an toàn cho cả Desktop và Mobile
-- **Facebook Marketing Automation**: Tự động hóa comment trên Facebook posts
-- **Banner Management**: Hệ thống quảng cáo động với A/B testing
-- **Campaign Scheduling**: Lên lịch và quản lý các chiến dịch marketing
-- **Real-time Analytics**: Thống kê click, IP tracking, device detection
+> **Tài liệu này dành cho chính bạn trong tương lai - khi đã quên hoàn toàn dự án.**
+> 
+> Cập nhật lần cuối: Tháng 2, 2026
 
 ---
 
-## 🏗️ Kiến Trúc Chung
+## 📋 Mục lục
+
+1. [Tổng quan hệ thống](#1-tổng-quan-hệ-thống)
+2. [Kiến trúc tổng thể](#2-kiến-trúc-tổng-thể)
+3. [Giải thích chi tiết từng thư mục](#3-giải-thích-chi-tiết-từng-thư-mục)
+4. [Luồng hoạt động của hệ thống](#4-luồng-hoạt-động-của-hệ-thống)
+5. [Những điểm đã thay đổi theo thời gian](#5-những-điểm-đã-thay-đổi-theo-thời-gian)
+6. [Những lưu ý quan trọng cho việc tiếp tục phát triển](#6-những-lưu-ý-quan-trọng-cho-việc-tiếp-tục-phát-triển)
+7. [Gợi ý refactor hoặc đơn giản hóa kiến trúc](#7-gợi-ý-refactor-hoặc-đơn-giản-hóa-kiến-trúc)
+
+---
+
+## 1. Tổng quan hệ thống
+
+### 🎯 Mục đích dự án
+
+Đây là hệ thống **Link Shortener + Facebook Marketing Automation** dành cho affiliate Shopee với các tính năng chính:
+
+1. **Quản lý link rút gọn** - Tạo bài viết dạng tin tức, chứa link affiliate Shopee
+2. **Tracking click thông minh** - Phân biệt click thật (từ người dùng VN) vs click ảo (bot, datacenter)
+3. **A/B Testing Banner** - Hiển thị banner quảng cáo với weight khác nhau để test hiệu quả
+4. **Facebook Automation** - Tự động comment link Shopee vào các bài viết trên Facebook (Groups, Fanpages)
+5. **Extension sync** - Chrome Extension đồng bộ Facebook credentials và bắt GraphQL doc_id
+
+### 🏗️ Thành phần hệ thống
+
+| Thư mục | Vai trò | Công nghệ | Port |
+|---------|---------|-----------|------|
+| `backend` | API Server chính | Node.js + Express + MongoDB | 3001 |
+| `bridge-server` | Redirect server + Campaign executor | Node.js + Express | 3002 |
+| `frontend` | Admin Dashboard (cũ) | React 18 + Ant Design | 3000 |
+| `frontend-next` | Admin Dashboard (mới) + Public site | Next.js 14 + TypeScript | 3000 |
+| `facebook-sync-extension` | Chrome Extension | Manifest V3 | - |
+
+### 📊 Database & Services
+
+| Service | Mục đích |
+|---------|----------|
+| **MongoDB Atlas** | Database chính (Hong Kong region) |
+| **Redis** | Cache, rate limiting, async tracking queue |
+| **Cloudinary** | CDN cho upload images/videos |
+| **IP2Location** | Database để detect IP VN vs IP datacenter |
+
+---
+
+## 2. Kiến trúc tổng thể
+
+### 📐 Sơ đồ kiến trúc
 
 ```
-Shoppe/
-├── backend/              # Node.js + Express API Server (Port 3001)
-├── frontend/             # React Admin Dashboard (Port 3000)
-├── bridge-server/        # Proxy Server để xử lý Deep Linking (Port 3002)
-└── facebook-sync-extension/  # Chrome Extension để đồng bộ Facebook
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              INTERNET / USERS                                    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                    │                                    │
+                    │ (Public traffic)                   │ (Admin traffic)
+                    ▼                                    ▼
+┌─────────────────────────────────────┐    ┌─────────────────────────────────────┐
+│  PUBLIC SITE (Next.js SSR)          │    │    ADMIN DASHBOARD                  │
+│  - Homepage (tin tức)               │    │    (React CSR hoặc Next.js)         │
+│  - Article pages (SEO optimized)    │    │    - Quản lý links, campaigns       │
+│  - Click tracking                   │    │    - Quản lý banners, users         │
+│  - Banner display                   │    │    - Facebook accounts              │
+│  Port: 3000 (frontend-next)         │    │    - Dashboard thống kê             │
+└─────────────────────────────────────┘    └─────────────────────────────────────┘
+                    │                                    │
+                    ▼                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              BACKEND (Express.js)                                │
+│                                  Port: 3001                                      │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  API Endpoints:                                                                  │
+│  - /api/auth/*          → Authentication (JWT)                                   │
+│  - /api/links/*         → CRUD links, stats                                      │
+│  - /api/campaigns/*     → CRUD campaigns                                         │
+│  - /api/banners/*       → CRUD banners, A/B testing                              │
+│  - /api/facebook-accounts/* → Facebook credentials                               │
+│  - /api/facebook-operations/* → GraphQL doc_ids                                  │
+│  - /api/upload/*        → Cloudinary integration                                 │
+│  - /:slug               → Article render với meta injection                      │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            BRIDGE SERVER (Express.js)                            │
+│                                  Port: 3002                                      │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  - /go/:slug            → Redirect affiliate link (referrer washing)            │
+│  - Campaign Scheduler   → Cron job chạy campaigns mỗi 5 phút                     │
+│  - Facebook Automation  → Comment tự động lên posts                              │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                    │                                    │
+                    ▼                                    ▼
+┌─────────────────────────────────────┐    ┌─────────────────────────────────────┐
+│            MONGODB ATLAS            │    │              FACEBOOK               │
+│  Collections:                       │    │  - Crawl posts từ Groups/Pages      │
+│  - users                            │    │  - Comment via GraphQL API          │
+│  - links                            │    │  - Cookie-based authentication      │
+│  - campaigns                        │    │                                     │
+│  - facebookaccounts                 │    │                                     │
+│  - facebookoperations               │    │                                     │
+│  - banners                          │    │                                     │
+│  - resourcesets                     │    │                                     │
+└─────────────────────────────────────┘    └─────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                          CHROME EXTENSION                                        │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  - Capture Facebook credentials (token, cookies, fb_dtsg)                       │
+│  - Bắt GraphQL doc_id từ tất cả API calls                                        │
+│  - Sync về backend để update database                                            │
+│  - Self-healing: Tự cập nhật khi Facebook thay đổi API                          │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 🔗 Quan hệ giữa các Models
+
+```
+User ─┬─→ Link (1:N)              User sở hữu nhiều links
+      ├─→ Campaign (1:N)          User tạo nhiều campaigns
+      ├─→ FacebookAccount (1:N)   User kết nối nhiều FB accounts
+      ├─→ ResourceSet (1:N)       User tạo nhiều resource sets
+      └─→ Banner (1:N)            User tạo nhiều banners
+
+Campaign ─→ FacebookAccount (N:1) Campaign chạy qua 1 FB account
+
+Banner ─→ Link (via slug)         Banner trỏ đến link cụ thể
+
+FacebookOperation (standalone)     Lưu GraphQL doc_ids, sync từ Extension
 ```
 
 ---
 
-## 📦 Backend (`/backend`)
+## 3. Giải thích chi tiết từng thư mục
 
-### Cấu Trúc Thư Mục
+### 📁 `backend/` - API Server chính
+
+**Vai trò:** Xử lý toàn bộ API, authentication, và business logic chính.
 
 ```
 backend/
 ├── src/
-│   ├── server.js                      # Entry point chính
+│   ├── server.js              # Entry point - khởi tạo Express server
 │   ├── config/
-│   │   ├── mongodb.js                # Kết nối MongoDB
-│   │   └── redis.js                  # Kết nối Redis
-│   ├── models/                       # MongoDB Schemas
-│   │   ├── User.js                  # User model (admin/user roles)
-│   │   ├── Link.js                  # Link model (rút gọn URL + tracking)
-│   │   ├── Campaign.js              # Campaign model (chiến dịch Facebook)
-│   │   ├── Banner.js                # Banner model (quảng cáo)
-│   │   ├── FacebookAccount.js       # Tài khoản Facebook
-│   │   └── ResourceSet.js           # Tập hợp tài nguyên
-│   ├── controllers/
-│   │   ├── bannerController.js      # Logic xử lý banner
-│   │   ├── renderController.js      # Render HTML + Open Graph
-│   │   └── resourceSetController.js # Quản lý resource sets
+│   │   ├── mongodb.js         # MongoDB Atlas connection
+│   │   ├── redis.js           # Redis connection
+│   │   └── cloudinary.js      # Cloudinary SDK config
+│   ├── controllers/           # Business logic handlers
+│   │   ├── AutomationController.js    # Facebook automation logic
+│   │   ├── bannerController.js        # Banner CRUD + A/B testing
+│   │   ├── facebookOperationController.js  # doc_id management
+│   │   ├── renderController.js        # Article rendering + SEO
+│   │   └── resourceSetController.js   # Resource templates
 │   ├── middleware/
-│   │   ├── auth.js                  # JWT authentication
-│   │   ├── ipFilter.js              # IP filtering + IP2Location lookup
-│   │   ├── imageOptimizer.js        # Tối ưu hóa ảnh
-│   │   ├── smartRouting.js          # Smart routing (bot detection)
-│   │   └── uploadHandler.js         # Xử lý upload file
-│   ├── routes/                       # API Routes
-│   │   ├── linkRoutes.js            # CRUD links
-│   │   ├── redirectRoutes.js        # Redirect URLs
-│   │   ├── authRoutes.js            # Authentication
-│   │   ├── campaignRoutes.js        # Chiến dịch Facebook
-│   │   ├── bannerRoutes.js          # Quản lý banner
-│   │   ├── dashboardRoutes.js       # Dashboard statistics
-│   │   ├── userRoutes.js            # User management
-│   │   ├── uploadRoutes.js          # File upload (Cloudinary)
-│   │   ├── cloudinaryRoutes.js      # Cloudinary API wrapper
-│   │   ├── facebookAccountRoutes.js # Tài khoản Facebook
-│   │   ├── extensionRoutes.js       # Extension integration
-│   │   ├── resourceSetRoutes.js     # Resource management
-│   │   ├── accountRoutes.js         # Account operations
-│   │   ├── debugRoutes.js           # Debug endpoints
-│   │   └── redirectRoutes.js        # Redirect logic
-│   ├── services/
-│   │   ├── linkServiceMongo.js      # Link CRUD operations
-│   │   ├── linkService.js           # Legacy link service
-│   │   ├── campaignScheduler.js     # Cron job scheduling
-│   │   ├── facebookAutomationService.js  # Facebook API automation
-│   │   ├── facebookCrawler.js       # Facebook post crawler
-│   │   └── uploadService.js         # Upload & image optimization
-│   └── tests/
-│       ├── testDualModeComment.js    # Test dual-mode commenting
-│       └── testFacebookCrawler.js    # Test Facebook crawler
-├── sample.bin.db11/                 # IP2Location database
-├── sample6.bin.db11/                # IP2Location database (alternative)
-└── package.json                     # Dependencies
+│   │   ├── auth.js            # JWT authentication + role check
+│   │   ├── ipFilter.js        # IP2Location: detect VN vs datacenter
+│   │   ├── smartRouting.js    # Bot detection, rate limiting
+│   │   ├── imageOptimizer.js  # Sharp resize, WebP conversion
+│   │   └── uploadHandler.js   # Multer config
+│   ├── models/                # Mongoose schemas
+│   │   ├── User.js
+│   │   ├── Link.js
+│   │   ├── Campaign.js
+│   │   ├── FacebookAccount.js
+│   │   ├── FacebookOperation.js
+│   │   ├── Banner.js
+│   │   └── ResourceSet.js
+│   ├── routes/                # API route definitions (20+ files)
+│   ├── services/              # Business services (facebook automation, etc.)
+│   └── views/                 # EJS templates
+├── sample.bin.db11/           # IP2Location database (IPv4)
+├── sample6.bin.db11/          # IP2Location database (IPv6)
+└── uploads/                   # Local file uploads (legacy)
 ```
 
-### Models Chi Tiết
+**Công nghệ chính:**
+- Express.js 4.18
+- Mongoose 8.0 (MongoDB ODM)
+- JWT authentication (7 ngày expiry)
+- bcrypt password hashing
+- Cloudinary SDK
+- IP2Location
+- Sharp (image processing)
 
-#### **User Model** (`src/models/User.js`)
-```javascript
-{
-  username: String,           // Unique, lowercase
-  password: String,           // Hashed with bcrypt
-  role: 'admin' | 'user',    // Authorization level
-  fullName: String,          // Display name
-  email: String,             // Optional
-  phone: String,             // Optional
-  isActive: Boolean,         // Account status
-  stats: {
-    totalLinks: Number,
-    totalClicks: Number,
-    totalCampaigns: Number
-  },
-  createdAt: Date,
-  updatedAt: Date
-}
-```
+**API Endpoints quan trọng:**
 
-#### **Link Model** (`src/models/Link.js`)
-```javascript
-{
-  slug: String,              // Unique, used in URLs
-  title: String,             // Display title
-  targetUrl: String,         // Destination URL
-  description: String,       // SEO meta description
-  imageUrl: String,          // Open Graph image
-  category: String,          // e.g., "Khuyến mãi", "Flash Sale"
-  author: String,            // Content author
-  userId: ObjectId,          // Owner reference
-  
-  // Tracking data
-  clickLogs: [{
-    ip: String,
-    userAgent: String,
-    referer: String,
-    device: 'desktop|mobile|tablet',
-    isValid: Boolean,
-    clickedAt: Date
-  }],
-  
-  // Statistics
-  totalClicks: Number,
-  validClicks: Number,       // Only valid user clicks
-  uniqueIPs: Number,
-  
-  // Status
-  isActive: Boolean,
-  expiresAt: Date,           // Optional expiration
-  publishedAt: Date,
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-#### **Campaign Model** (`src/models/Campaign.js`)
-```javascript
-{
-  name: String,
-  description: String,
-  userId: ObjectId,          // Campaign owner
-  
-  // Content
-  slugs: [String],           // List of Shopee links to comment
-  commentTemplates: [String], // Random comments to post
-  
-  // Scheduling
-  startTime: String,         // HH:mm format
-  durationHours: Number,     // Campaign duration
-  startDate: Date,           // Start date
-  
-  // Targeting filters
-  minLikes: Number,
-  minComments: Number,
-  minShares: Number,
-  
-  // Frequency control
-  maxCommentsPerPost: Number,
-  
-  // Status tracking
-  status: 'active'|'paused'|'stopped'|'completed',
-  
-  // Safety info
-  blockedAt: Date,           // When account got blocked
-  totalComments: Number,     // Sent comments count
-  
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-#### **Banner Model** (`src/models/Banner.js`)
-```javascript
-{
-  name: String,              // Internal name
-  type: 'sticky_bottom'|'popup'|'inline', // Banner type
-  
-  // Image URLs
-  imageUrl: String,          // Desktop image
-  mobileImageUrl: String,    // Mobile image
-  altText: String,
-  
-  // Target
-  targetSlug: String,        // Link to redirect to
-  targetUrl: String,         // Full URL
-  
-  // Display settings
-  device: 'desktop'|'mobile'|'all',
-  showDelay: Number,         // ms before showing
-  autoHideAfter: Number,     // ms to auto-hide
-  dismissible: Boolean,      // Allow close button
-  
-  // A/B Testing
-  variant: String,           // A, B, C...
-  
-  // Stats
-  stats: {
-    impressions: Number,
-    clicks: Number,
-    ctr: Number,             // Click-through rate
-    uniqueClicks: Number,
-    clickedIPs: [String]
-  },
-  
-  // Targeting
-  articleSlug: String,       // Show on specific article
-  displayOn: 'all'|'specific',
-  
-  isActive: Boolean,
-  expiresAt: Date,
-  createdAt: Date,
-  updatedAt: Date
-}
-```
-
-### Services Chi Tiết
-
-#### **linkServiceMongo.js**
-- CRUD operations cho Links
-- Click tracking và validation
-- IP-based unique click counting
-- Data initialization
-
-#### **facebookAutomationService.js** (3600+ lines)
-- **Desktop GraphQL API Integration**: Gửi comment qua Desktop Chrome simulation
-- **Dual-Mode Commenting**:
-  - Mode A: Comment trực tiếp trên posts
-  - Mode B: Reply to comments với name substitution
-- **Desktop HTML Scraping**: Crawl feed để lấy post IDs
-- **Security**: Cookie-based authentication, jazoest token generation
-- **Auto-stop**: Tự động dừng khi bị block
-
-#### **facebookCrawler.js**
-- Desktop Chrome headers simulation
-- URL parsing và normalization
-- Feed HTML extraction
-- Bot detection prevention
-
-#### **campaignScheduler.js**
-- Cron job scheduling cho campaigns
-- Automatic campaign execution
-- Status tracking và updates
-
-#### **uploadService.js**
-- Cloudinary integration
-- Image optimization với Sharp
-- File validation
-
-### Middleware Chi Tiết
-
-#### **smartRouting.js** (Smart Routing Middleware)
-**Purpose**: Phân biệt giữa Bot requests và User requests
-
-**Logic Flow**:
-```
-Request → Check User-Agent
-  ├─ Is Preview Bot (Facebook, Twitter, Zalo)?
-  │  └─ Return HTML with Open Graph meta tags
-  ├─ Check IP address (IP2Location)
-  │  ├─ Is Datacenter/Bot?
-  │  │  └─ Don't count click
-  │  └─ Is from Vietnam?
-  │     └─ Count valid click in MongoDB
-  └─ Track in Redis (Rate limiting)
-```
-
-**Supported Bot Detection**:
-- facebookexternalhit, facebookcatalog, facebot
-- twitterbot, zalo, googlebot
-- linkedinbot, telegrambot, discordbot, slackbot
-- whatsapp, pinterest, skypeuripreview, line-poker
-
-#### **ipFilter.js**
-- IP2Location database lookup
-- Detect datacenter/proxy IPs
-- Get country, ISP, region info
-- Cache results in Redis
-
-#### **auth.js**
-- JWT token validation
-- User role checking (admin/user)
-- Optional authentication middleware
-
-#### **imageOptimizer.js**
-- Resize images
-- Format conversion
-- Compression
-
-#### **uploadHandler.js**
-- Multer integration
-- File validation
-- Cloudinary storage
-
-### Routes Overview
-
-| Route | Method | Auth | Mục Đích |
-|-------|--------|------|---------|
-| `/api/links/public` | GET | ❌ | Lấy danh sách public links |
-| `/api/links` | GET | ✅ | Lấy links của user |
-| `/api/links` | POST | ✅ | Tạo link mới |
-| `/api/links/:id` | PUT | ✅ | Cập nhật link |
-| `/api/links/:id` | DELETE | ✅ | Xóa link |
-| `/api/links/:slug/track` | POST | ❌ | Tracking view |
-| `/api/links/:slug` | GET | ❌ | Chi tiết link |
-| `/go/:slug` | GET | ❌ | Redirect (Smart Routing) |
-| `/api/banners/random` | GET | ❌ | Random banner |
-| `/api/campaigns` | GET/POST | ✅ | Campaign management |
-| `/api/auth/login` | POST | ❌ | User login |
-| `/api/auth/logout` | POST | ✅ | User logout |
-| `/api/dashboard/*` | GET | ✅ | Analytics & stats |
-| `/api/upload` | POST | ✅ | File upload |
-
-### Configuration Files
-
-#### **config/mongodb.js**
-- Kết nối MongoDB
-- Connection pooling
-- Error handling
-
-#### **config/redis.js**
-- Kết nối Redis
-- Cache layer
-- Rate limiting
+| Prefix | Chức năng |
+|--------|-----------|
+| `/api/auth/*` | Login, user management |
+| `/api/links/*` | CRUD links, stats |
+| `/api/campaigns/*` | CRUD campaigns, start/pause/stop |
+| `/api/banners/*` | CRUD banners, A/B testing |
+| `/api/facebook-accounts/*` | FB credentials management |
+| `/api/facebook-operations/*` | GraphQL doc_id sync |
+| `/api/extension/*` | Chrome Extension integration |
+| `/api/upload/*` | Cloudinary upload |
+| `/:slug` | Article page render |
 
 ---
 
-## 🎨 Frontend (`/frontend`)
+### 📁 `bridge-server/` - Redirect Server + Campaign Executor
 
-### Cấu Trúc Thư Mục
+**Vai trò:** 
+1. **Referrer washing** - Redirect link affiliate mà không để lộ nguồn traffic
+2. **Campaign automation** - Thực thi các campaigns (comment tự động lên Facebook)
+
+```
+bridge-server/
+├── index.js               # Entry point - Express server port 3002
+├── src/
+│   ├── config/
+│   │   └── mongodb.js     # Shared MongoDB connection
+│   ├── models/            # Copy của models (TRÙNG LẶP với backend!)
+│   │   ├── Link.js
+│   │   ├── Campaign.js
+│   │   └── FacebookAccount.js
+│   └── services/
+│       ├── campaignScheduler.js      # Cron jobs
+│       ├── facebookAutomationService.js  # Comment automation (4000+ lines)
+│       └── facebookCrawler.js        # Crawl posts từ FB
+└── tests/
+    └── bridge-tests.js    # Integration tests
+```
+
+**Công nghệ chính:**
+- Express.js
+- node-cron (scheduling)
+- Cheerio (HTML parsing)
+- Axios (HTTP requests)
+
+**Endpoints:**
+
+| Route | Chức năng |
+|-------|-----------|
+| `GET /health` | Health check |
+| `GET /stats` | Server statistics |
+| `GET /go/:slug` | **MAIN** - Redirect link với referrer washing |
+
+**⚠️ LƯU Ý QUAN TRỌNG:**
+- Bridge-server **DÙNG CHUNG MongoDB** với backend
+- Models bị **DUPLICATE** (copy từ backend thay vì import)
+- `facebookAutomationService.js` có **>4000 lines code TRÙNG** với backend
+
+---
+
+### 📁 `frontend/` - Admin Dashboard (React CRA - PHIÊN BẢN CŨ)
+
+**Vai trò:** Giao diện admin quản lý hệ thống - đây là phiên bản **React CRA cũ**.
 
 ```
 frontend/
-├── src/
-│   ├── App.js                        # Main routing component
-│   ├── index.js                      # React DOM render
-│   ├── components/
-│   │   ├── HomePage.js              # Homepage (articles list)
-│   │   ├── ArticleDetail.js         # Single article page
-│   │   ├── Login.js                 # Login page
-│   │   ├── AdminLayout.js           # Admin sidebar layout
-│   │   ├── Dashboard.js             # Admin dashboard
-│   │   ├── LinksPage.js             # Links management page
-│   │   ├── LinkForm.js              # Create/edit link form
-│   │   ├── LinkFormArticle.js       # Article creation form
-│   │   ├── LinkTable.js             # Links table with sorting
-│   │   ├── CampaignList.js          # Campaigns list
-│   │   ├── CampaignForm.js          # Campaign creation form
-│   │   ├── FacebookAccountManager.js # Facebook account sync
-│   │   ├── UserManagement.js        # Admin user management
-│   │   ├── UserProfile.js           # User profile page
-│   │   ├── ResourceManagement.js    # Resource sets management
-│   │   ├── ExtensionSetupGuide.js   # Extension setup instructions
-│   │   ├── PostIdExtractor.js       # Extract Facebook post IDs
-│   │   ├── StatsCards.js            # Dashboard statistics cards
-│   │   └── AdminDashboard.js        # Admin-only dashboard
-│   ├── pages/
-│   │   └── ExtensionAuthPage.js    # Extension OAuth page
-│   ├── services/
-│   │   ├── api.js                  # Axios configuration
-│   │   ├── authService.js          # Authentication logic
-│   │   ├── campaignService.js      # Campaign API calls
-│   │   └── uploadService.js        # Upload API calls
-│   ├── config/
-│   │   └── api.js                  # API endpoints
-│   └── index.js                     # Entry point
 ├── public/
-│   └── index.html                   # HTML template
-└── package.json                     # Dependencies
+│   └── index.html         # SPA entry point
+├── src/
+│   ├── index.js           # React entry
+│   ├── App.js             # Routes + ConfigProvider
+│   ├── styles.css         # Custom CSS
+│   ├── components/        # 25+ React components
+│   │   ├── Layout.js              # Admin layout với Sidebar
+│   │   ├── Login.js               # Login form
+│   │   ├── Dashboard.js           # Stats dashboard
+│   │   ├── LinksPage.js           # Link management
+│   │   ├── CampaignList.js        # Campaign list
+│   │   ├── CampaignForm.js        # Campaign create/edit
+│   │   ├── BannerManagement.js    # Banner CRUD
+│   │   ├── FacebookAccountManager.js  # FB accounts
+│   │   ├── Homepage.js            # Public homepage
+│   │   ├── ArticleDetail.js       # Article view
+│   │   └── ... (15+ more)
+│   ├── services/          # API calls
+│   │   ├── api.js                 # Axios instance
+│   │   ├── authService.js         # Auth logic
+│   │   └── mediaUploadService.js  # Upload functions
+│   └── config/            # Config files
+└── package.json
 ```
 
-### Components Chi Tiết
+**Công nghệ chính:**
+- React 18.2
+- React Router DOM 6.30
+- Ant Design 5.12
+- Axios 1.6
+- Recharts (charts)
+- React Quill (WYSIWYG editor)
 
-#### **Homepage.js** - Trang Chủ
-- Hiển thị danh sách links (articles) mới nhất
-- Search & filter by category
-- Hot links section (trending)
-- Responsive design
-
-#### **ArticleDetail.js** - Chi Tiết Bài Viết
-- Full article content display
-- Meta information (author, date, views)
-- Cookie injection iframe (affiliate tracking)
-- Banner system with sticky bottom
-- Deep link redirect logic
-
-**Key Features**:
-```javascript
-- injectCookieIframe(): Tạo invisible iframe để seed cookies
-- handleBannerClick(): Xử lý click banner (mobile vs desktop)
-- handleRedirect(): Smart redirect dựa vào device type
-- trackView(): Gửi tracking data
-```
-
-#### **AdminLayout.js** - Admin Sidebar Layout
-- Navigation menu
-- User authentication check
-- Role-based access control
-- Responsive sidebar
-
-#### **Dashboard.js** - Admin Dashboard
-- Key metrics cards (total clicks, links, campaigns)
-- Charts with Recharts
-- Recent activity log
-- Performance statistics
-
-#### **LinksPage.js** - Links Management
-- List tất cả links
-- Create/Edit/Delete operations
-- Bulk actions
-- Sorting & filtering
-
-#### **LinkForm.js** - Link Creation Form
-- Form fields:
-  - Slug (URL slug)
-  - Title
-  - Target URL
-  - Description
-  - Image URL
-  - Category
-  - Author
-  - Status
-- Image preview
-- Validation
-
-#### **LinkTable.js** - Links Table Display
-- Sortable columns
-- Pagination
-- Click stats display
-- Edit/Delete actions
-
-#### **CampaignList.js** - Campaign Management
-- List active/paused/completed campaigns
-- Status indicators
-- Start/Stop/Pause actions
-- Edit campaign
-
-#### **CampaignForm.js** - Campaign Creation
-- Form fields:
-  - Campaign name
-  - Description
-  - Links (select multiple)
-  - Comment templates
-  - Schedule (start time, duration)
-  - Targeting filters (min likes, comments, shares)
-  - Frequency control
-- Template management
-- Status preview
-
-#### **FacebookAccountManager.js** - Facebook Account Sync
-- Connect Facebook account
-- Account list
-- Sync extension data
-- Cookie management
-- Token refresh
-
-#### **UserManagement.js** - User Admin Panel
-- Create new users
-- Edit user info
-- Change roles
-- Deactivate accounts
-- View stats
-
-#### **ExtensionSetupGuide.js** - Extension Instructions
-- Step-by-step setup guide
-- Browser compatibility
-- Permission explanation
-
-#### **PostIdExtractor.js** - Facebook Post ID Tool
-- Extract post IDs from URLs
-- Batch extraction
-- Copy to clipboard
-
-### Services
-
-#### **authService.js**
-```javascript
-- isAuthenticated()    // Check login status
-- isAdmin()           // Check admin role
-- login(username, password)
-- logout()
-- getToken()
-- setToken(token)
-- getUser()
-- isTokenExpired()
-```
-
-#### **api.js** (Axios Instance)
-```javascript
-- baseURL: http://localhost:3001
-- Default headers
-- Interceptors for auth
-- Error handling
-```
-
-#### **campaignService.js**
-```javascript
-- getCampaigns()
-- createCampaign(data)
-- updateCampaign(id, data)
-- deleteCampaign(id)
-- startCampaign(id)
-- pauseCampaign(id)
-- stopCampaign(id)
-```
-
-#### **uploadService.js**
-```javascript
-- uploadImage(file)
-- uploadMultiple(files)
-- getUploadProgress()
-```
-
-### Theme Configuration
-- Primary color: #EE4D2D (Shopee red)
-- UI Library: Ant Design v5
-- Font: System fonts with fallback
-- Border radius: 8px
+**Trạng thái:** ⚠️ **ĐANG ĐƯỢC MIGRATE** sang `frontend-next`
 
 ---
 
-## 🌐 Bridge Server (`/bridge-server`)
+### 📁 `frontend-next/` - Admin Dashboard + Public Site (Next.js - PHIÊN BẢN MỚI)
 
-### Mục Đích
-Proxy server để xử lý deep linking an toàn, kiểm tra link availability, và referrer washing.
+**Vai trò:** Phiên bản mới thay thế `frontend`, với thêm:
+- **SSR** cho SEO public pages
+- **TypeScript** cho type safety
+- **Tailwind CSS** cho styling
 
-### Cấu Trúc
 ```
-bridge-server/
-├── index.js              # Main server
-└── package.json          # Dependencies (Express, Mongoose)
+frontend-next/
+├── next.config.js         # Next.js config (rewrites to backend)
+├── middleware.ts          # Bot detection + auth protection
+├── tailwind.config.ts     # Tailwind configuration
+├── tsconfig.json          # TypeScript strict mode
+├── src/
+│   ├── app/               # Next.js App Router
+│   │   ├── layout.tsx             # Root layout (SSR)
+│   │   ├── page.tsx               # Homepage (SSR)
+│   │   ├── article/[slug]/page.tsx  # Article pages (SSR)
+│   │   ├── admin/                 # Admin section (CSR)
+│   │   │   ├── layout.tsx         # Admin layout
+│   │   │   ├── login/page.tsx
+│   │   │   ├── dashboard/page.tsx
+│   │   │   ├── links/page.tsx
+│   │   │   ├── campaigns/page.tsx
+│   │   │   ├── banners/page.tsx
+│   │   │   ├── facebook/page.tsx
+│   │   │   ├── resources/page.tsx
+│   │   │   ├── users/page.tsx
+│   │   │   └── profile/page.tsx
+│   │   └── api/                   # API routes
+│   ├── components/        # Shared components
+│   ├── lib/               # Utilities, API client
+│   ├── hooks/             # Custom React hooks
+│   └── config/            # Configuration
+├── *.md                   # Documentation files (nhiều file!)
+└── package.json
 ```
 
-### Routes
+**Công nghệ chính:**
+- Next.js 14 (App Router)
+- TypeScript 5.3 (strict mode)
+- Tailwind CSS 3.3
+- Ant Design 6.2
+- Recharts
 
-#### `GET /go/:slug`
-- Lấy link từ MongoDB
-- Kiểm tra availability (active + not expired)
-- Referrer washing (no-referrer-when-downgrade)
-- Cache control headers
-- Redirect người dùng
-
-#### HTML Fallback
-- 404 page nếu link không tồn tại
-
-### Key Features
-- Minimal MongoDB connection (chỉ cần links collection)
-- Referrer policy management
-- Cache prevention headers
-- Safe redirect mechanism
+**Trạng thái:** ✅ **PRODUCTION READY** cho core features
 
 ---
 
-## 🔌 Extension (`/facebook-sync-extension`)
+### 📁 `facebook-sync-extension/` - Chrome Extension
 
-### Mục Đích
-Chrome extension để tự động hóa đồng bộ dữ liệu Facebook (cookies, tokens, posts).
+**Vai trò:** Thu thập Facebook credentials và GraphQL doc_ids.
 
-### Cấu Trúc
 ```
 facebook-sync-extension/
-├── manifest.json         # Extension manifest (MV3)
-├── bg.js                 # Background service worker
-├── background.js         # Alternative background script
-└── icons/
-    ├── create-icons.js   # Icon generation script
-    └── [icon files]      # PNG icons (16, 48, 128)
+├── manifest.json          # Extension config (Manifest V3)
+├── bg.js                  # Background service worker
+├── content.js             # Content script (bridge)
+├── inject.js              # Page script (hook fetch/XHR)
+└── icons/                 # Extension icons
 ```
 
-### Manifest v3 Config
-```json
-{
-  "permissions": ["scripting", "activeTab", "tabs", "cookies"],
-  "host_permissions": ["*://*.facebook.com/*", "http://localhost:3001/*"],
-  "background": { "service_worker": "bg.js" }
-}
-```
+**Cách hoạt động:**
 
-### bg.js - Background Service Worker
+1. **inject.js** chạy trong page context của Facebook
+   - Hook `window.fetch` và `XMLHttpRequest`
+   - Bắt tất cả requests đến `/api/graphql/`
+   - Extract `doc_id` và `fb_api_req_friendly_name`
 
-#### Main Logic Flow
-```
-1. Click extension icon
-   └─ Open admin page (http://localhost:3000/admin)
+2. **content.js** làm bridge
+   - Nhận message từ inject.js qua `postMessage`
+   - Forward đến background script
 
-2. Detect sync URL (towblock_connect=1 parameter)
-   ├─ Extract userId from URL
-   └─ Execute extraction script
+3. **bg.js** xử lý chính
+   - Lưu doc_ids vào `chrome.storage.local` (deduplication)
+   - Sync lên backend `/api/facebook-operations/capture`
+   - Extract Facebook token/cookies khi user click connect
+   - Sync credentials lên `/api/accounts/sync`
 
-3. Extract Facebook data
-   ├─ Get cookies
-   ├─ Get access tokens
-   ├─ Parse post data
-   └─ Send to backend
-
-4. Close tab after sync
-```
-
-#### Key Functions
-- `chrome.action.onClicked`: Icon click handler
-- `chrome.tabs.onUpdated`: Tab URL monitoring
-- `chrome.scripting.executeScript`: Inject extraction script
-- `sleep()`: Utility delay function
-
-#### Extraction Process
-1. Wait 2 seconds for Facebook to load
-2. Inject content script
-3. Collect cookies from document.cookie
-4. Parse Facebook GraphQL data
-5. Extract post IDs and metadata
-6. Send to backend API
-7. Close tab automatically
+**Tại sao cần extension này?**
+- Facebook thường xuyên thay đổi `doc_id` của GraphQL APIs
+- Extension tự động bắt và update → **Self-healing system**
 
 ---
 
-## 🗄️ Database Schema
+## 4. Luồng hoạt động của hệ thống
 
-### MongoDB Collections
-
-#### **links**
-- Stores all shortened links
-- Indexed: slug, userId, isActive
-- Includes click logs and statistics
-
-#### **users**
-- User accounts
-- Indexed: username, email
-- Stores role-based permissions
-
-#### **campaigns**
-- Facebook automation campaigns
-- Indexed: userId, status
-- Tracks scheduling and execution
-
-#### **banners**
-- Advertisement banners
-- Indexed: type, device, articleSlug
-- Includes performance metrics
-
-#### **facebookaccounts**
-- Connected Facebook accounts
-- Stores cookies and tokens
-- Indexed: userId
-
-#### **resourcesets**
-- Collection of resources (links, images, templates)
-- Organized by type and category
-
-### Redis Cache Keys
-```
-link:{slug}             // Cached link data
-user:{userId}           // User session cache
-campaign:{id}           // Campaign schedule
-ip-info:{ip}           // IP location data (2hr TTL)
-rate-limit:{ip}        // Request rate limiting
-```
-
----
-
-## 🔄 Data Flow Examples
-
-### Example 1: User Clicks a Link (Smart Routing)
+### 🔄 Luồng 1: User click vào link affiliate
 
 ```
-User clicks link → Request hits /go/:slug
-│
-├─ Is Preview Bot?
-│  ├─ YES → Return HTML with Open Graph meta
-│  │        (For Facebook preview)
-│  └─ NO → Continue
-│
-├─ Get client IP
-│  └─ Check against IP2Location DB
-│
-├─ Is Datacenter/Bot IP?
-│  ├─ YES → Don't count click, redirect silently
-│  └─ NO → Continue
-│
-├─ Is Valid User from Vietnam?
-│  ├─ YES → Create ClickLog entry in MongoDB
-│  │        Update stats
-│  └─ NO → Log as invalid click
-│
-└─ Redirect user
-   ├─ Check device type
-   ├─ Set referrer policy
-   └─ Send 301 redirect
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 1. User nhìn thấy bài viết trên Facebook (comment chứa link)                 │
+│    Ví dụ: https://yourdomain.com/deal-hot-shopee                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 2. Request đến Backend (port 3001)                                           │
+│    - smartRoutingMiddleware phân tích User-Agent                             │
+│    - ipFilter kiểm tra IP (VN? Datacenter?)                                  │
+│    - Nếu là social bot (Facebook, Zalo...) → Trả HTML với OG meta tags       │
+│    - Nếu là user thật → Render bài viết + tracking click                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 3. User đọc bài viết, thấy banner/button "Mua ngay"                          │
+│    - Banner random theo weight (A/B testing)                                 │
+│    - Click → Redirect qua Bridge Server                                      │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 4. Bridge Server (port 3002) - /go/:slug                                     │
+│    - Set headers: Referrer-Policy: no-referrer (ẩn nguồn traffic)            │
+│    - Async tracking click                                                    │
+│    - 302 Redirect → Shopee affiliate link                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 5. User mua hàng trên Shopee → Bạn nhận commission                           │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Example 2: Facebook Campaign Execution
+### 🔄 Luồng 2: Facebook Campaign Automation
 
 ```
-Admin creates campaign
-│
-└─ Set schedule: startTime=08:00, durationHours=5
-   │
-   └─ Schedule cron job via node-cron
-      │
-      └─ At 08:00 (every day):
-         ├─ Load campaign details
-         ├─ Get Facebook account (cookie + token)
-         ├─ Fetch feed posts using Desktop GraphQL
-         ├─ Filter posts (minLikes, minComments, etc)
-         │
-         ├─ For each post:
-         │  ├─ Select random slug
-         │  ├─ Select random comment template
-         │  ├─ Send comment via GraphQL API
-         │  ├─ Wait random delay (1-3 min)
-         │  └─ Check if comment was posted
-         │
-         ├─ Loop until duration expires (08:00 + 5 hours)
-         │
-         └─ Stop campaign
-            ├─ Update status to 'completed'
-            └─ Send notification
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 1. Admin tạo Campaign trong Dashboard                                        │
+│    - Chọn Facebook Account                                                   │
+│    - Nhập list Groups/Fanpages để target                                     │
+│    - Nhập comment templates (có thể dùng {link} placeholder)                 │
+│    - Chọn links để random                                                    │
+│    - Set schedule (giờ bắt đầu, duration)                                    │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 2. Bridge Server - Campaign Scheduler (chạy mỗi 5 phút)                      │
+│    - Query campaigns có status = 'active'                                    │
+│    - Check thời gian: trong khoảng startTime → endTime?                      │
+│    - Lấy Facebook Account credentials (token, cookie, fb_dtsg)               │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 3. Facebook Crawler                                                          │
+│    - Crawl HTML từ Groups/Fanpages (Desktop mode)                            │
+│    - Parse posts bằng Cheerio                                                │
+│    - Filter theo criteria (minLikes, minComments, minShares)                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 4. Facebook Automation Service                                               │
+│    - Lấy doc_id cho CometUFICreateCommentMutation từ DB                      │
+│    - Random chọn comment template + link                                     │
+│    - Gửi GraphQL request với browser fingerprint                             │
+│    - Delay random (delayMin → delayMax) giữa các comments                    │
+│    - Update campaign stats                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Example 3: Article Display with Banner
+### 🔄 Luồng 3: Extension sync Facebook credentials
 
 ```
-User opens article page
-│
-└─ ArticleDetail component mounts
-   │
-   ├─ fetchArticle(slug)
-   │  ├─ Call /api/links/:slug
-   │  ├─ Track view with /api/links/:slug/track
-   │  └─ Set article state
-   │
-   ├─ fetchBanner()
-   │  ├─ Call /api/banners/random
-   │  ├─ Filter by: type, device, articleSlug
-   │  └─ Set banner state
-   │
-   └─ useEffect triggers if article && banner exist
-      │
-      └─ Call injectCookieIframe(banner.targetSlug)
-         │
-         ├─ Create hidden 1x1 iframe
-         ├─ Set src to /go/:targetSlug
-         ├─ Append to DOM
-         └─ Remove after 5 seconds
-            (Affiliate cookies seeded in localStorage)
-
-User sees article + sticky banner at bottom
-│
-└─ User clicks banner
-   │
-   ├─ trackBannerClick()
-   │  └─ POST /api/banners/:id/click
-   │
-   └─ Redirect based on device
-      ├─ Mobile: window.location.href (deep link)
-      └─ Desktop: window.open (new tab)
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 1. User cài Extension, đăng nhập Facebook trên browser                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 2. Extension (inject.js) hook fetch/XHR                                      │
+│    - Bắt tất cả requests đến /api/graphql/                                   │
+│    - Extract doc_id và friendlyName                                          │
+│    - Gửi về backend qua /api/facebook-operations/capture                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ 3. User click "Connect" trong Admin Dashboard                                │
+│    - Mở tab Facebook với URL chứa ?towblock_connect=1&userId=xxx             │
+│    - Extension detect, extract:                                              │
+│      + Access token từ window.__accessToken                                  │
+│      + fb_dtsg từ DTSGInitialData                                            │
+│      + Tất cả cookies                                                        │
+│      + Browser fingerprint                                                   │
+│    - Gửi về backend qua /api/accounts/sync                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🔐 Authentication & Authorization
+## 5. Những điểm đã thay đổi theo thời gian
 
-### User Roles
+### 📈 Sự tiến hóa của dự án
 
-#### **Admin**
-- ✅ View all links
-- ✅ View all campaigns
-- ✅ Manage users
-- ✅ Access system statistics
-- ✅ Delete any content
+#### Phase 1: Khởi đầu đơn giản
+- Chỉ có `backend` + `frontend` (React CRA)
+- Link management cơ bản
+- Không có Facebook automation
 
-#### **User**
-- ✅ Create/edit own links
-- ✅ Create/manage own campaigns
-- ✅ View own statistics
-- ❌ View other users' data
-- ❌ Manage users
+#### Phase 2: Thêm Facebook Automation
+- Thêm Facebook Account management
+- Thêm Campaign system
+- **Vấn đề:** Logic Facebook được viết trong backend
 
-### JWT Token
-```javascript
-{
-  userId: ObjectId,
-  username: String,
-  role: 'admin'|'user',
-  exp: Number (timestamp)
-}
-```
+#### Phase 3: Tách Bridge Server
+- Tạo `bridge-server` riêng để:
+  1. **Referrer washing** - Ẩn nguồn traffic affiliate
+  2. **Di chuyển Campaign Automation** ra khỏi backend
+- **Vấn đề:** Code bị copy thay vì share → **>10,000 lines duplicate**
 
-- Stored in localStorage
-- Sent in Authorization header: `Bearer {token}`
-- Validated on every protected route
-- Expires after 7 days (configurable)
+#### Phase 4: Thêm Extension (Self-healing)
+- Tạo `facebook-sync-extension`
+- Tự động bắt GraphQL doc_ids khi Facebook thay đổi API
+- Không cần manual update doc_ids nữa
+
+#### Phase 5: Migration sang Next.js
+- Tạo `frontend-next` với:
+  - SSR cho SEO
+  - TypeScript cho type safety
+  - Tailwind CSS
+- **Trạng thái:** Đang migrate, chưa hoàn tất 100%
+
+### ⚠️ Những vấn đề tồn đọng
+
+| Vấn đề | Chi tiết |
+|--------|----------|
+| **Code duplicate** | `facebookAutomationService.js` (~4000 lines) tồn tại ở CẢ backend VÀ bridge-server |
+| **Models duplicate** | Link, Campaign, FacebookAccount có ở cả 2 nơi |
+| **Frontend cũ vẫn còn** | `frontend/` chưa được xóa dù đã có `frontend-next` |
+| **Ownership không rõ ràng** | Campaign scheduler có ở cả backend và bridge-server |
 
 ---
 
-## 🚀 Running the Project
+## 6. Những lưu ý quan trọng cho việc tiếp tục phát triển
 
-### Prerequisites
-- Node.js 16+
-- MongoDB 5+
-- Redis 6+
-- Chrome browser (for extension)
+### 🔴 Critical - Phải biết
 
-### Installation
+1. **MongoDB dùng chung**
+   - Backend và Bridge-server dùng **CÙNG** MongoDB database
+   - Khi thay đổi schema, phải update CẢ HAI models
+
+2. **Campaign chạy ở Bridge-server**
+   - KHÔNG chạy campaign scheduler ở backend (code có nhưng đã commented)
+   - Chỉ bridge-server thực sự execute campaigns
+
+3. **doc_ids thay đổi thường xuyên**
+   - Facebook thay đổi GraphQL doc_ids không báo trước
+   - Extension tự động sync doc_ids mới
+   - Nếu automation fail, kiểm tra `FacebookOperation` collection
+
+4. **IP Filter chỉ cho phép VN**
+   - `ipFilter.js` chặn traffic không phải từ VN
+   - Datacenter IPs (AWS, Google Cloud, etc.) bị đánh dấu invalid
+
+### 🟡 Important - Nên nhớ
+
+1. **Environment Variables cần thiết**
+   ```bash
+   # Backend
+   MONGODB_URI=mongodb+srv://...
+   REDIS_URL=redis://...
+   CLOUDINARY_CLOUD_NAME=xxx
+   CLOUDINARY_API_KEY=xxx
+   CLOUDINARY_API_SECRET=xxx
+   JWT_SECRET=xxx
+   
+   # Frontend
+   REACT_APP_API_URL=http://localhost:3001
+   NEXT_PUBLIC_API_URL=http://localhost:3001
+   ```
+
+2. **Chạy dự án**
+   ```bash
+   # Terminal 1 - Backend
+   cd backend && npm run dev
+   
+   # Terminal 2 - Bridge Server
+   cd bridge-server && npm run dev
+   
+   # Terminal 3 - Frontend (chọn 1)
+   cd frontend && npm start        # React CRA cũ
+   cd frontend-next && npm run dev # Next.js mới
+   ```
+
+3. **Extension development**
+   - Load unpacked từ `facebook-sync-extension/`
+   - Sau khi sửa code, cần reload extension trong `chrome://extensions`
+
+### 🟢 Nice to know
+
+1. **Banner A/B Testing**
+   - Weight từ 0-100
+   - Random banner theo weight ratio
+   - Track impressions và clicks riêng
+
+2. **Article caching**
+   - Frontend cache articles trong localStorage
+   - Backend cache React build HTML
+
+3. **Rate limiting**
+   - 10 requests/phút per IP per link
+   - Dùng Redis để track
+
+---
+
+## 7. Gợi ý refactor hoặc đơn giản hóa kiến trúc
+
+### 🎯 Ưu tiên cao - Nên làm ngay
+
+#### 1. Xóa code duplicate (~10,000 lines)
+
+**Vấn đề:** `facebookAutomationService.js` và `facebookCrawler.js` có ở cả backend và bridge-server.
+
+**Giải pháp:**
+```
+/packages/
+├── shared-models/           # Mongoose models dùng chung
+├── facebook-automation/     # Facebook automation logic
+└── utils/                   # Shared utilities
+```
 
 ```bash
-# Backend
-cd backend
-npm install
-cp .env.example .env  # Configure DB, Redis, Cloudinary
-
-# Frontend
-cd frontend
-npm install
-cp .env.example .env  # Configure API URL
-
-# Bridge Server
-cd bridge-server
-npm install
-cp .env.example .env  # Configure DB
-
-# Extension
-# Load in Chrome at chrome://extensions/
+# Dùng npm workspaces hoặc yarn workspaces
+npm init -w packages/shared-models
+npm init -w packages/facebook-automation
 ```
 
-### Environment Variables
+#### 2. Xác định rõ ownership
 
-#### Backend (.env)
+**Hiện tại:**
+- Backend: CRUD + có scheduler (commented out)
+- Bridge: CRUD + scheduler (active)
+
+**Đề xuất:**
+- Backend: **CRUD only** - Không chạy scheduler
+- Bridge: **Execution only** - Chạy scheduler, redirect
+
+#### 3. Hoàn thành migration frontend-next
+
+**Còn thiếu:**
+- [ ] Pagination cho list pages
+- [ ] Search/filter functionality
+- [ ] Bulk actions
+- [ ] Error boundaries
+- [ ] Unit tests
+
+**Sau khi xong:** Xóa folder `frontend/`
+
+### 🎯 Ưu tiên trung bình
+
+#### 4. Thêm monitoring & logging
+
+- Thêm Sentry/LogRocket cho error tracking
+- Thêm metrics cho campaign performance
+- Health check dashboard
+
+#### 5. Tách Facebook Operations thành microservice
+
+Nếu scale lên, tách thành service riêng:
 ```
-PORT=3001
-MONGO_URI=mongodb://localhost:27017/shoppe
-REDIS_HOST=localhost
-REDIS_PORT=6379
-JWT_SECRET=your_jwt_secret
-CLOUDINARY_NAME=your_cloudinary
-CLOUDINARY_API_KEY=your_key
-CLOUDINARY_API_SECRET=your_secret
-IP2LOCATION_DB_PATH=./sample.bin.db11
-BRIDGE_SERVER_URL=http://localhost:3002
-```
-
-#### Frontend (.env)
-```
-REACT_APP_API_URL=http://localhost:3001
-REACT_APP_BRIDGE_URL=http://localhost:3002
-```
-
-#### Bridge Server (.env)
-```
-PORT=3002
-MONGO_URI=mongodb://localhost:27017/shoppe
-```
-
-### Starting Services
-
-```bash
-# Terminal 1: Backend
-cd backend && npm run dev
-
-# Terminal 2: Frontend
-cd frontend && npm start
-
-# Terminal 3: Bridge Server
-cd bridge-server && npm start
-
-# Load Extension in Chrome
-chrome://extensions/ → Load unpacked → Select facebook-sync-extension/
+facebook-service/
+├── api/          # REST API cho operations
+├── workers/      # Background job workers
+└── scheduler/    # Campaign scheduler
 ```
 
-### Verify Setup
-```
-✅ Frontend: http://localhost:3000
-✅ Backend: http://localhost:3001
-✅ Bridge: http://localhost:3002
-✅ Extension: Appears in Chrome toolbar
-```
+### 🎯 Ưu tiên thấp (nice to have)
+
+#### 6. Thêm queue system
+
+- Dùng BullMQ/Agenda thay vì node-cron
+- Retry mechanism cho failed comments
+- Rate limiting per Facebook account
+
+#### 7. Thêm TypeScript cho backend
+
+- Hiện tại backend dùng JavaScript
+- Migrate sang TypeScript để đồng bộ với frontend-next
 
 ---
 
-## 📊 Key Features Detailed
+## 📚 Tài liệu bổ sung
 
-### 1. Smart Routing
-- **Bot Detection**: Identifies Facebook, Twitter, Zalo bots
-- **IP Filtering**: Uses IP2Location to block datacenters
-- **Device Detection**: Separates mobile/desktop users
-- **Open Graph**: Returns preview HTML for social sharing
-- **Rate Limiting**: Redis-based request throttling
-
-### 2. Deep Linking
-- **Referrer Washing**: No-referrer policy for privacy
-- **Device-specific**: Different behavior for mobile vs desktop
-- **Affiliate Cookie Injection**: Hidden iframe for tracking
-- **Expiration**: Links can expire after set date
-
-### 3. Facebook Automation
-- **Desktop GraphQL**: Uses standard Chrome headers
-- **Dual-Mode Commenting**:
-  - Direct post comments
-  - Reply to specific comments with name substitution
-- **Feed Crawler**: HTML scraping for post discovery
-- **Safety Checks**: Auto-stop on block detection
-- **Scheduling**: Cron-based campaign scheduling
-
-### 4. Banner System
-- **Dynamic Loading**: Random banner selection
-- **A/B Testing**: Multiple banner variants
-- **Device-specific**: Different images for mobile/desktop
-- **Auto-hide**: Configurable display duration
-- **Sticky Bottom**: Remains visible while scrolling
-- **Click Tracking**: Measures CTR and engagement
-
-### 5. Analytics
-- **Click Tracking**: Individual click logs with IP, device, referer
-- **Unique Visits**: Deduplicated by IP address
-- **Geographic Data**: Country/region/city via IP2Location
-- **Device Stats**: Desktop vs mobile breakdown
-- **Real-time Dashboard**: Updated statistics
-
-### 6. User Management
-- **Role-based Access**: Admin vs User permissions
-- **Permission Scoping**: Users see only their own data
-- **Account Creation**: Admin creates accounts (no self-signup)
-- **Status Management**: Activate/deactivate users
+| File | Nội dung |
+|------|----------|
+| [frontend-next/ARCHITECTURE.md](frontend-next/ARCHITECTURE.md) | Kiến trúc frontend-next chi tiết |
+| [frontend-next/START_HERE.md](frontend-next/START_HERE.md) | Hướng dẫn bắt đầu với frontend-next |
+| [frontend-next/ADMIN_MIGRATION_GUIDE.md](frontend-next/ADMIN_MIGRATION_GUIDE.md) | Chi tiết migration từ React sang Next.js |
+| [backend/CLOUDINARY_INTEGRATION_GUIDE.js](backend/CLOUDINARY_INTEGRATION_GUIDE.js) | Hướng dẫn Cloudinary |
+| [backend/FACEBOOK_MANAGEMENT_IMPLEMENTATION.js](backend/FACEBOOK_MANAGEMENT_IMPLEMENTATION.js) | Chi tiết Facebook integration |
 
 ---
 
-## 🛠️ Configuration & Customization
+## 🏁 Kết luận
 
-### Image Optimization
-Located in `backend/src/middleware/imageOptimizer.js`
-- Resize to 1200x630 (Open Graph recommended)
-- Convert to WebP for web
-- Compress with quality 80
+Đây là một hệ thống **Link Management + Facebook Marketing Automation** khá phức tạp với:
 
-### IP2Location Database
-- Two sample databases included: `sample.bin.db11` and `sample6.bin.db11`
-- Database file path configured in backend/.env
-- Updates available from IP2Location.com
+- ✅ **Điểm mạnh:**
+  - Self-healing GraphQL doc_ids qua Extension
+  - IP filtering để track click thật
+  - A/B testing banners
+  - Referrer washing cho affiliate links
+  - SSR cho SEO (frontend-next)
 
-### Cloudinary Integration
-- Image hosting and CDN
-- Automatic optimization
-- URL transformation API
+- ⚠️ **Điểm cần cải thiện:**
+  - Code duplicate giữa backend và bridge-server
+  - Hai frontend song song (cũ và mới)
+  - Ownership không rõ ràng
 
-### Campaign Scheduler
-- Uses `node-cron` for scheduling
-- Configurable timezone
-- Auto-stop on errors
+**Nếu tiếp tục phát triển, ưu tiên số 1 là xóa code duplicate và hoàn thành migration frontend-next.**
 
 ---
 
-## 📝 API Documentation
-
-### Public APIs (No Auth Required)
-
-```
-GET  /api/links/public              # Get all public links
-GET  /:slug                         # Get link detail
-GET  /api/banners/random            # Random banner
-POST /api/links/:slug/track         # Track view
-```
-
-### Protected APIs (Auth Required)
-
-```
-GET    /api/links                   # Get user's links
-POST   /api/links                   # Create link
-PUT    /api/links/:id               # Update link
-DELETE /api/links/:id               # Delete link
-
-GET    /api/campaigns               # Get campaigns
-POST   /api/campaigns               # Create campaign
-PUT    /api/campaigns/:id           # Update campaign
-DELETE /api/campaigns/:id           # Delete campaign
-POST   /api/campaigns/:id/start     # Start campaign
-POST   /api/campaigns/:id/pause     # Pause campaign
-POST   /api/campaigns/:id/stop      # Stop campaign
-
-GET    /api/dashboard/*             # Various statistics
-
-POST   /api/auth/login              # User login
-POST   /api/auth/logout             # User logout
-
-GET    /api/users                   # List users (admin only)
-POST   /api/users                   # Create user (admin only)
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Links Not Tracking
-- Check if IP2Location database exists
-- Verify MongoDB connection
-- Check Redis cache
-- Review smartRouting middleware logs
-
-### Facebook Comments Not Posting
-- Verify Facebook account cookies are valid
-- Check if campaign is scheduled correctly
-- Ensure fb_dtsg token is extracted
-- Check for account blocks (auto-stop)
-
-### Extension Not Syncing
-- Check manifest.json permissions
-- Verify server is running on port 3001
-- Check browser console for errors
-- Ensure userId parameter is in URL
-
-### Banner Not Displaying
-- Check if banner exists and is active
-- Verify article slug matches
-- Check device filter configuration
-- Ensure showDelay hasn't passed
-
----
-
-## 📚 Additional Resources
-
-- **IP2Location**: www.ip2location.com
-- **Ant Design**: ant.design
-- **React Router**: reactrouter.com
-- **Mongoose**: mongoosejs.com
-- **Express**: expressjs.com
-- **Recharts**: recharts.org
-
----
-
-## 👥 Contributing
-
-When adding new features:
-1. Update relevant model/schema
-2. Add route endpoint
-3. Implement controller logic
-4. Add middleware if needed
-5. Update frontend component
-6. Add error handling
-7. Test with real data
-
----
-
-## 📄 License
-
-Proprietary - Shoppe Link Management System
-
----
-
-## 📞 Support
-
-For issues or questions:
-- Check logs: `backend/server.js`, `frontend/App.js`
-- Review MongoDB collections for data integrity
-- Test APIs with Postman
-- Check browser console for frontend errors
-
----
-
-**Last Updated**: January 15, 2026
-**Version**: 1.0.0
-**Status**: Production Ready
+> _"Code không có documentation giống như một trò đùa không có punchline."_
+> 
+> — Bạn trong quá khứ, viết cho bạn trong tương lai 🙂

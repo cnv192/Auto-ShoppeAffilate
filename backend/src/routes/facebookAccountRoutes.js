@@ -341,4 +341,281 @@ router.post('/:id/refresh', authenticate, async (req, res) => {
     }
 });
 
+/**
+ * POST /api/facebook-accounts/:id/sync
+ * Sync managed pages from Facebook
+ * 
+ * Priority 1: Use Graph API if accessToken present
+ * Priority 2: Fallback to scraping via cookie
+ * 
+ * Response: { success, data: { pages: [...] }, message }
+ */
+router.post('/:id/sync', authenticate, async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Fetch account
+        const account = await FacebookAccount.findById(id)
+            .select('+accessToken +cookie +userAgent');
+        
+        if (!account) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy tài khoản Facebook'
+            });
+        }
+        
+        // Check permission
+        if (req.user.role !== 'admin' && account.userId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Bạn không có quyền sync tài khoản này'
+            });
+        }
+        
+        console.log(`🔄 [SyncAccount] Starting page sync for account: ${account.name}`);
+        
+        let pages = [];
+        let syncMethod = 'unknown';
+        
+        // PRIORITY 1: Try Graph API if accessToken present
+        if (account.accessToken && account.accessToken.startsWith('EAAG')) {
+            try {
+                console.log('   📡 Attempting to fetch pages via Graph API...');
+                
+                const graphUrl = 'https://graph.facebook.com/me/accounts';
+                const params = new URLSearchParams({
+                    access_token: account.accessToken,
+                    fields: 'id,name,picture,category,access_token',
+                    limit: 100
+                });
+                
+                const response = await fetch(`${graphUrl}?${params}`, {
+                    method: 'GET',
+                    headers: {
+                        'User-Agent': account.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Graph API error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.data && Array.isArray(data.data)) {
+                    pages = data.data.map(page => ({
+                        pageId: page.id,
+                        name: page.name,
+                        accessToken: page.access_token || undefined,
+                        picture: page.picture?.data?.url || null,
+                        category: page.category || null
+                    }));
+                    
+                    syncMethod = 'graph_api';
+                    console.log(`   ✅ Graph API: Found ${pages.length} pages`);
+                } else if (data.error) {
+                    throw new Error(`Graph API error: ${data.error.message}`);
+                }
+            } catch (error) {
+                console.warn(`   ⚠️  Graph API failed: ${error.message}`);
+                console.log('   ↻ Falling back to cookie scraping...');
+            }
+        } else {
+            console.log('   ℹ️  No Graph API token, using cookie scraping...');
+        }
+        
+        // PRIORITY 2: Fallback to scraping via cookie
+        if (pages.length === 0 && account.cookie) {
+            try {
+                console.log('   🍪 Scraping pages via cookie from mbasic.facebook.com...');
+                
+                const { fetchPagesViaCookie } = require('../services/facebookCrawler');
+                
+                pages = await fetchPagesViaCookie(account.cookie);
+                syncMethod = 'cookie_scrape';
+                console.log(`   ✅ Cookie scrape: Found ${pages.length} pages`);
+                
+            } catch (error) {
+                console.error(`   ❌ Cookie scraping failed: ${error.message}`);
+            }
+        }
+        
+        // Update account with synced pages
+        account.pages = pages;
+        account.lastPagesSyncAt = new Date();
+        
+        await account.save();
+        console.log(`💾 [SyncAccount] Saved ${pages.length} pages for ${account.name}`);
+        
+        return res.json({
+            success: true,
+            message: `Đồng bộ thành công (phương pháp: ${syncMethod})`,
+            data: {
+                method: syncMethod,
+                pages: pages,
+                syncedAt: account.lastPagesSyncAt,
+                count: pages.length
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Sync account error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Lỗi server',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * POST /api/facebook/post
+ * Create a new post on user profile or managed page
+ * 
+ * Body:
+ * {
+ *   accountId: String (Facebook account ID),
+ *   targetId: String (Profile ID or Page ID to post as),
+ *   message: String (Post message/caption),
+ *   attachments: Array (Optional image URLs or media objects),
+ *   privacy: String (Optional: 'EVERYONE', 'FRIENDS', 'SELF')
+ * }
+ * 
+ * Response: { success, postId, url, message, error }
+ */
+router.post('/post', authenticate, async (req, res) => {
+    try {
+        const { accountId, targetId, message, attachments = [], privacy = 'EVERYONE' } = req.body;
+        
+        // ==========================================
+        // VALIDATION
+        // ==========================================
+        if (!accountId || !targetId || !message) {
+            return res.status(400).json({
+                success: false,
+                message: 'Thiếu thông tin bắt buộc (accountId, targetId, message)'
+            });
+        }
+        
+        if (message.trim().length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Nội dung bài viết không được để trống'
+            });
+        }
+        
+        console.log(`📝 [Post] Creating post for account: ${accountId}, target: ${targetId}`);
+        
+        // ==========================================
+        // FETCH ACCOUNT
+        // ==========================================
+        const account = await FacebookAccount.findById(accountId)
+            .select('+cookie +fb_dtsg +userAgent');
+        
+        if (!account) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy tài khoản Facebook'
+            });
+        }
+        
+        // Check permission
+        if (req.user.role !== 'admin' && account.userId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Bạn không có quyền đăng từ tài khoản này'
+            });
+        }
+        
+        // Verify targetId exists (either profile or managed page)
+        const isProfilePost = (targetId === account.facebookId);
+        let isPagePost = false;
+        
+        if (!isProfilePost) {
+            isPagePost = account.pages.some(p => p.pageId === targetId);
+            if (!isPagePost) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'ID đích không hợp lệ (không phải profile hoặc page được quản lý)'
+                });
+            }
+        }
+        
+        console.log(`   📌 Target: ${isProfilePost ? 'Profile' : 'Page'} (${targetId})`);
+        
+        // ==========================================
+        // PREPARE POST
+        // ==========================================
+        if (!account.cookie || !account.fb_dtsg) {
+            return res.status(400).json({
+                success: false,
+                message: 'Tài khoản không có cookie hoặc DTSG token. Vui lòng đồng bộ lại.'
+            });
+        }
+        
+        // ==========================================
+        // CALL FACEBOOK API SERVICE
+        // ==========================================
+        const { FacebookAPI } = require('../services/facebookAutomationService');
+        const fbAPI = new FacebookAPI(account.accessToken, account.cookie);
+        
+        const postResult = await fbAPI.postToFeed(
+            targetId,
+            message,
+            account.fb_dtsg,
+            {
+                attachments,
+                privacy
+            }
+        );
+        
+        if (!postResult.success) {
+            console.error(`❌ [Post] Failed to create post:`, postResult.error);
+            return res.status(500).json({
+                success: false,
+                message: 'Không thể đăng bài viết',
+                error: postResult.error
+            });
+        }
+        
+        console.log(`✅ [Post] Post created successfully: ${postResult.postId}`);
+        
+        // ==========================================
+        // UPDATE STATS
+        // ==========================================
+        try {
+            account.stats.totalCampaigns = (account.stats.totalCampaigns || 0) + 1;
+            account.stats.lastUsedAt = new Date();
+            await account.save();
+        } catch (error) {
+            console.warn('⚠️  Could not update stats:', error.message);
+        }
+        
+        // ==========================================
+        // RETURN RESPONSE
+        // ==========================================
+        return res.status(201).json({
+            success: true,
+            message: 'Đăng bài viết thành công',
+            data: {
+                postId: postResult.postId,
+                url: postResult.url,
+                message: postResult.message,
+                target: isProfilePost ? 'profile' : 'page',
+                targetId,
+                timestamp: postResult.timestamp
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Post error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Lỗi server',
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;

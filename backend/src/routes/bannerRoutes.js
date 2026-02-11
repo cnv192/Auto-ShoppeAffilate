@@ -73,13 +73,13 @@ router.get('/:id', authenticate, bannerController.getById);
  * POST /api/banners
  * Create new banner
  */
-router.post('/', authenticate, requireAdmin, bannerController.create);
+router.post('/', authenticate, bannerController.create);
 
 /**
  * PUT /api/banners/:id
  * Update banner
  */
-router.put('/:id', authenticate, requireAdmin, bannerController.update);
+router.put('/:id', authenticate, bannerController.update);
 
 /**
  * DELETE /api/banners/:id

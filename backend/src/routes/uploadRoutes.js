@@ -9,10 +9,57 @@ const express = require('express');
 const router = express.Router();
 const { uploadMiddleware, handleUploadError } = require('../middleware/uploadHandler');
 const { optimizeProductImage, cleanupImages } = require('../middleware/imageOptimizer');
+const UploadService = require('../services/uploadService');
 
 // ============================================================
 // ROUTES
 // ============================================================
+
+/**
+ * POST /api/upload/image
+ * 
+ * Generic image upload to Cloudinary
+ * 
+ * Form data:
+ * - image: File (required)
+ * 
+ * Response:
+ * {
+ *   success: true,
+ *   data: {
+ *     url: "https://...cloudinary..."
+ *   }
+ * }
+ */
+router.post(
+    '/image',
+    uploadMiddleware.single('image'),
+    handleUploadError,
+    async (req, res) => {
+        try {
+            if (!req.file) {
+                return res.status(400).json({ success: false, error: 'No file uploaded.' });
+            }
+
+            const uploadResult = await UploadService.uploadFile(req.file.buffer, 'banners');
+
+            res.json({
+                success: true,
+                data: {
+                    url: uploadResult.secureUrl,
+                }
+            });
+        } catch (err) {
+            console.error('❌ Generic image upload error:', err);
+            res.status(500).json({
+                success: false,
+                error: 'Lỗi upload hình ảnh',
+                code: 'IMAGE_UPLOAD_ERROR'
+            });
+        }
+    }
+);
+
 
 /**
  * POST /api/upload/product/:productId

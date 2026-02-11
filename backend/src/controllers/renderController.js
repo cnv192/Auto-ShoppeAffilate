@@ -250,6 +250,35 @@ const generateFallbackHtml = (meta) => {
 };
 
 /**
+ * Render Homepage with Meta Injection
+ * Handler for / and /home routes
+ */
+const renderHomepage = async (req, res) => {
+    const currentUrl = `${req.protocol}://${req.get('host')}/`;
+
+    try {
+        console.log(`✅ [RenderController] Rendering homepage`);
+        
+        return renderWithMeta(res, {
+            title: 'Hot News - Tin tức nóng hổi, deal hot mỗi ngày',
+            description: 'Cập nhật tin tức mới nhất, deal hot, khuyến mãi hấp dẫn từ Shopee, Lazada, Tiki mỗi ngày. Không bỏ lỡ bất kỳ ưu đãi nào!',
+            imageUrl: 'https://via.placeholder.com/1200x630?text=Hot+News',
+            url: currentUrl,
+            type: 'website',
+            siteName: 'Hot News'
+        });
+
+    } catch (error) {
+        console.error('❌ [RenderController] Homepage error:', error);
+        return renderWithMeta(res, {
+            title: 'Hot News - Tin tức nóng hổi',
+            description: 'Cập nhật tin tức mới nhất, deal hot, khuyến mãi hấp dẫn.',
+            url: currentUrl
+        });
+    }
+};
+
+/**
  * Preview-only handler (for social media bots)
  * Returns minimal HTML with just meta tags
  */
@@ -325,6 +354,7 @@ const generatePreviewHtml = (meta) => {
 
 module.exports = {
     renderArticle,
+    renderHomepage,
     renderPreview,
     injectMetaTags,
     getReactTemplate,

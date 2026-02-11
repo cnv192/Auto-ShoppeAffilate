@@ -1,3 +1,5 @@
+const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
 const Campaign = require('../models/Campaign');
 const FacebookAccount = require('../models/FacebookAccount');
 const Link = require('../models/Link');
@@ -454,18 +456,20 @@ class FacebookAPI {
             formData.append('doc_id', '5587197327998288'); // Feedback query doc_id
             formData.append('variables', JSON.stringify(variables));
             
-            const headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Origin': 'https://www.facebook.com',
-                'Referer': 'https://www.facebook.com/',
-                'Cookie': this.cookie,
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Dest': 'empty'
+            // Build dynamic headers from browserFingerprint (Anti-Detect)
+            const account = {
+                browserFingerprint: this.browserFingerprint || null,
+                cookie: this.cookie,
+                fb_dtsg: dtsg || null
             };
+            const headers = buildDynamicHeaders(account);
+            headers['Accept'] = '*/*';
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            headers['Origin'] = 'https://www.facebook.com';
+            headers['Referer'] = 'https://www.facebook.com/';
+            headers['Sec-Fetch-Site'] = 'same-origin';
+            headers['Sec-Fetch-Mode'] = 'cors';
+            headers['Sec-Fetch-Dest'] = 'empty';
             
             let graphqlStats = null;
             
@@ -499,23 +503,15 @@ class FacebookAPI {
             const targetUrl = postUrl || `https://www.facebook.com/${postId}`;
             console.log(`   🔗 Fetching: ${targetUrl}`);
             
-            const htmlHeaders = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Cache-Control': 'no-cache',
-                'Pragma': 'no-cache',
-                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"Windows"',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Upgrade-Insecure-Requests': '1',
-                'Cookie': this.cookie
-            };
+            // Use dynamic headers for HTML fallback (Anti-Detect)
+            const htmlHeaders = buildDynamicHeaders(account);
+            htmlHeaders['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
+            htmlHeaders['Cache-Control'] = 'no-cache';
+            htmlHeaders['Pragma'] = 'no-cache';
+            htmlHeaders['Sec-Fetch-Dest'] = 'document';
+            htmlHeaders['Sec-Fetch-Mode'] = 'navigate';
+            htmlHeaders['Sec-Fetch-Site'] = 'none';
+            htmlHeaders['Sec-Fetch-User'] = '?1';
             
             try {
                 const htmlResponse = await fetch(targetUrl, {
@@ -1774,6 +1770,212 @@ class FacebookAPI {
         }
     }
     
+    /**
+     * Post to Feed (Profile or Page)
+     * Supports posting text and images to either user profile or managed page
+     * 
+     * @param {String} targetId - Profile ID or Page ID (actor_id)
+     * @param {String} message - Post message/caption text
+     * @param {String} dtsg - Facebook DTSG token
+     * @param {Object} options - Additional options
+     *   - attachments: Array of image URLs or media objects
+     *   - privacy: 'EVERYONE', 'FRIENDS', 'SELF', etc. (default: 'EVERYONE')
+     *   - pageAccessToken: Page access token (if posting as page)
+     * 
+     * @returns {Promise<Object>} - { success, postId, url, message, error }
+     */
+    async postToFeed(targetId, message, dtsg, options = {}) {
+        try {
+            console.log('\n' + '='.repeat(80));
+            console.log('📝 [POST TO FEED] Starting feed post...');
+            console.log('='.repeat(80));
+            
+            // ==========================================
+            // VALIDATION
+            // ==========================================
+            if (!targetId || !/^\d+$/.test(targetId)) {
+                console.error(`❌ [Validation] Invalid target ID: ${targetId}`);
+                return { success: false, error: 'Invalid target ID' };
+            }
+            
+            if (!message || typeof message !== 'string' || message.trim().length === 0) {
+                console.error(`❌ [Validation] Invalid message`);
+                return { success: false, error: 'Message cannot be empty' };
+            }
+            
+            if (!dtsg) {
+                console.error(`❌ [Validation] Missing fb_dtsg token`);
+                return { success: false, error: 'Missing DTSG token' };
+            }
+            
+            if (!this.cookie) {
+                console.error(`❌ [Validation] No cookie available`);
+                return { success: false, error: 'No authentication cookie' };
+            }
+            
+            console.log(`   📌 Target ID: ${targetId}`);
+            console.log(`   📝 Message length: ${message.length} chars`);
+            console.log(`   🔑 DTSG: ${dtsg.substring(0, 20)}...`);
+            
+            // ==========================================
+            // EXTRACT USER ID
+            // ==========================================
+            const userId = this._extractUserId(this.cookie);
+            if (!userId) {
+                console.error('❌ Cannot extract User ID from cookie');
+                return { success: false, error: 'Invalid cookie - no user ID' };
+            }
+            console.log(`   👤 User ID: ${userId}`);
+            
+            // ==========================================
+            // BUILD GRAPHQL MUTATION
+            // ==========================================
+            
+            // Generate unique client mutation ID
+            const clientMutationId = this._generateClientMutationId();
+            
+            // Prepare attachments if provided
+            const attachments = [];
+            if (options.attachments && Array.isArray(options.attachments)) {
+                for (const att of options.attachments) {
+                    if (typeof att === 'string') {
+                        // URL - create image object
+                        attachments.push({
+                            type: 'photo',
+                            url: att
+                        });
+                    } else if (typeof att === 'object' && att.url) {
+                        attachments.push(att);
+                    }
+                }
+            }
+            
+            console.log(`   🖼️  Attachments: ${attachments.length}`);
+            
+            // Build GraphQL variables
+            const variables = {
+                input: {
+                    actor_id: targetId, // Profile ID or Page ID
+                    client_mutation_id: clientMutationId,
+                    source: 'WWW_COMPOSER',
+                    audience: {
+                        privacy: {
+                            base_state: options.privacy || 'EVERYONE'
+                        }
+                    },
+                    message: {
+                        text: message,
+                        ranges: []
+                    },
+                    attachments: attachments,
+                    __typename: 'CreateComposerInput'
+                },
+                useDefaultActor: false
+            };
+            
+            // ==========================================
+            // PREPARE REQUEST
+            // ==========================================
+            
+            const headers = getHeaders('desktop', this.cookie, {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest'
+            });
+            
+            // Build form data
+            const formData = new URLSearchParams();
+            formData.append('av', userId);
+            formData.append('__user', userId);
+            formData.append('__a', '1');
+            formData.append('__req', '1a');
+            formData.append('__comet_req', '5');
+            formData.append('fb_dtsg', dtsg);
+            formData.append('jazoest', this._generateJazoest(dtsg));
+            formData.append('doc_id', '5445405282326535'); // useCometUFICreateComposerMutation
+            formData.append('variables', JSON.stringify(variables));
+            formData.append('server_timestamps', 'true');
+            
+            console.log(`   📤 Sending GraphQL mutation...`);
+            
+            // ==========================================
+            // SEND REQUEST
+            // ==========================================
+            
+            const response = await fetch('https://www.facebook.com/api/graphql/', {
+                method: 'POST',
+                headers,
+                body: formData.toString()
+            });
+            
+            console.log(`   📡 Response status: ${response.status}`);
+            
+            if (!response.ok) {
+                console.error(`❌ HTTP error: ${response.status}`);
+                return { success: false, error: `HTTP ${response.status}` };
+            }
+            
+            const responseText = await response.text();
+            console.log(`   📊 Response size: ${responseText.length} bytes`);
+            
+            // ==========================================
+            // PARSE RESPONSE
+            // ==========================================
+            
+            let jsonData;
+            try {
+                jsonData = JSON.parse(responseText);
+            } catch (e) {
+                console.error('❌ Failed to parse response JSON');
+                return { success: false, error: 'Invalid response format' };
+            }
+            
+            console.log(`   📋 Response data:`, jsonData);
+            
+            // Check for GraphQL errors
+            if (jsonData.errors && jsonData.errors.length > 0) {
+                const error = jsonData.errors[0];
+                console.error(`❌ GraphQL error: ${error.message} (code: ${error.code})`);
+                return { success: false, error: error.message };
+            }
+            
+            // Extract post ID from response
+            if (jsonData.data && jsonData.data.comet_ufi_create_composer_mutation) {
+                const mutation = jsonData.data.comet_ufi_create_composer_mutation;
+                const feedback = mutation.feedback || {};
+                const postId = feedback.id || feedback.post_id;
+                
+                if (postId) {
+                    console.log(`✅ [SUCCESS] Post created: ${postId}`);
+                    
+                    // Construct public post URL
+                    const postUrl = `https://www.facebook.com/${targetId}/posts/${postId}`;
+                    
+                    return {
+                        success: true,
+                        postId,
+                        url: postUrl,
+                        message,
+                        timestamp: new Date().toISOString()
+                    };
+                }
+            }
+            
+            console.error(`❌ No post ID in response`);
+            return { success: false, error: 'No post ID returned', response: jsonData };
+            
+        } catch (error) {
+            console.error(`❌ [POST TO FEED] Error:`, error.message);
+            return { success: false, error: error.message };
+        }
+    }
+    
+    /**
+     * Generate unique client mutation ID
+     */
+    _generateClientMutationId() {
+        return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString();
+    }
+
     /**
      * Crawl Comments from a Facebook Post
      * Fetches top-level comments to enable Reply Mode (Mode B)
@@ -3630,6 +3832,585 @@ class CampaignAutomationService {
     }
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * GIAI ĐOẠN 2: AUTOMATED 9-STEP COMMENTING WITH NATURAL BEHAVIOR SIMULATION
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Quy trình giả lập hành vi tự nhiên:
+ * 1. Heartbeat (Start) - Báo hiệu bắt đầu active
+ * 2. Newsfeed Scroll - Lướt newsfeed
+ * 3. Open Post - Mở bài viết
+ * 4. Load Comments - Load comments cũ
+ * 5. Start Typing - Bắt đầu gõ
+ * 6. Typing Time - Giả lập thời gian gõ (0.2s/char)
+ * 7. Stop Typing - Kết thúc gõ
+ * 8. Create Comment - GỬI COMMENT
+ * 9. Heartbeat (End) - Báo hiệu kết thúc
+ * 
+ * Sequential Queue Processing:
+ * - Xử lý từng bài một (for...of, không Promise.all)
+ * - Cool-down 60-120 giây giữa các bài
+ * - Dynamic headers từ browserFingerprint
+ */
+
+// GraphQL doc_ids cho từng bước comment
+/**
+ * 9-STEP BEHAVIORAL SIMULATION DOC IDs
+ * Each step maps to a specific GraphQL operation recognized by Facebook
+ */
+const STEP_DOC_IDS = {
+    HEARTBEAT_START: '30113219891659124',      // FBScreenTimeLogger_syncMutation
+    NEWSFEED_SCROLL: '25746451248355891',      // CometNewsFeedPaginationQuery
+    OPEN_POST: '25438118379164198',            // CometFocusedStoryViewUFIQuery
+    LOAD_COMMENTS: '33524505640529463',        // CommentsListComponentsPaginationQuery
+    START_TYPING: '9815271091886179',          // CometUFILiveTypingBroadcastMutation_StartMutation
+    STOP_TYPING: '9972315006159780',           // CometUFILiveTypingBroadcastMutation_StopMutation
+    CREATE_COMMENT: null,                       // Dynamically fetched from getDynamicDocId()
+    HEARTBEAT_END: '30113219891659124'         // FBScreenTimeLogger_syncMutation
+};
+
+/**
+ * Sleep utility
+ */
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Random delay (giây)
+ */
+async function randomDelay(minSeconds, maxSeconds) {
+    const ms = (Math.random() * (maxSeconds - minSeconds) + minSeconds) * 1000;
+    console.log(`⏳ [Automation] Waiting ${(ms/1000).toFixed(2)}s...`);
+    await sleep(ms);
+}
+
+/**
+ * Xây dựng Dynamic Headers từ browserFingerprint (Anti-Detect v4.0)
+ * 
+ * 3-STEP LOGIC:
+ * 1. Kiểm tra account.browserFingerprint (từ Extension)
+ * 2. Nếu có & valid: Sử dụng real User-Agent, Sec-CH-UA, platform
+ * 3. Nếu không: Fallback đến Windows 10 Chrome (KHÔNG hardcode cứng)
+ * 
+ * ⚠️ QUAN TRỌNG: Trả về headers với tất cả sec-ch-ua* variations
+ */
+function buildDynamicHeaders(account) {
+    // Default fallback - Windows 10 Chrome (Modern)
+    const DEFAULT_FALLBACK = {
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        secChUa: '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        secChUaPlatform: '"Windows"',
+        platform: 'Windows',
+        mobile: false
+    };
+
+    let fingerprint = DEFAULT_FALLBACK;
+    let source = 'fallback';
+
+    // STEP 1: Kiểm tra browserFingerprint từ Extension
+    if (account && account.browserFingerprint) {
+        const fp = account.browserFingerprint;
+        
+        // STEP 2: Validate rằng tất cả required fields tồn tại
+        if (fp.userAgent && fp.secChUa && fp.secChUaPlatform) {
+            fingerprint = {
+                userAgent: fp.userAgent,
+                secChUa: fp.secChUa,
+                secChUaPlatform: fp.secChUaPlatform,
+                platform: fp.platform || 'Unknown',
+                mobile: fp.mobile === true
+            };
+            source = 'extension';
+            console.log(`✅ [BuildHeaders] Using browser fingerprint from Extension`);
+        } else {
+            // Fingerprint incomplete
+            const missing = [];
+            if (!fp.userAgent) missing.push('userAgent');
+            if (!fp.secChUa) missing.push('secChUa');
+            if (!fp.secChUaPlatform) missing.push('secChUaPlatform');
+            console.warn(`⚠️ [BuildHeaders] Fingerprint incomplete (missing: ${missing.join(', ')}), using fallback`);
+        }
+    } else {
+        console.warn('⚠️ [BuildHeaders] No browserFingerprint, using secure fallback');
+    }
+
+    // STEP 3: Xây dựng headers object với dynamic values
+    const cookieHeader = (account && account.cookie) || '';
+    const isMobile = fingerprint.mobile;
+
+    const headers = {
+        'User-Agent': fingerprint.userAgent,  // DYNAMIC từ Extension hoặc fallback
+        'Accept': isMobile
+            ? 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+            : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'sec-ch-ua': fingerprint.secChUa,  // DYNAMIC từ Extension
+        'sec-ch-ua-platform': fingerprint.secChUaPlatform,  // DYNAMIC từ Extension
+        'sec-ch-ua-mobile': isMobile ? '?1' : '?0',  // DYNAMIC dựa vào mobile flag
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cookie': cookieHeader,
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Cache-Control': 'max-age=0',
+        'Upgrade-Insecure-Requests': '1',
+        '__rev': '1032040031'
+    };
+
+    console.log(`📋 [Headers] UA: ${fingerprint.userAgent.substring(0, 40)}... | Platform: ${fingerprint.platform} | Mobile: ${isMobile} | Source: ${source}`);
+
+    return headers;
+}
+
+/**
+ * Thực hiện GraphQL request cho một bước
+ */
+async function executeGraphQLStep(account, stepName, docId, variables = {}) {
+    try {
+        const headers = buildDynamicHeaders(account);
+        const fbDtsg = account.fb_dtsg || '';
+
+        if (!fbDtsg) {
+            console.warn(`⚠️ [${stepName}] Missing fb_dtsg`);
+        }
+
+        const payload = {
+            __user: account.facebookId,
+            __a: '1',
+            __req: '1',
+            __hsi: Math.floor(Date.now() / 1000),
+            __comet_req: Math.floor(Math.random() * 100000),
+            fb_dtsg: fbDtsg,
+            ...variables
+        };
+
+        const url = 'https://www.facebook.com/api/graphql/';
+
+        console.log(`🔄 [${stepName}] GraphQL request (doc_id: ${docId})`);
+
+        const response = await axios.post(url, new URLSearchParams(payload).toString(), {
+            headers,
+            timeout: 30000,
+            validateStatus: () => true
+        });
+
+        console.log(`✅ [${stepName}] Response status: ${response.status}`);
+        return response.data;
+
+    } catch (error) {
+        console.error(`❌ [${stepName}] Error:`, error.message);
+        throw error;
+    }
+}
+
+/**
+ * Hàm chính: Quy trình 9 Bước Giả lập
+ * 
+ * Thực hiện comment trên một bài viết với 9 bước tự nhiên
+ */
+/**
+ * 🎬 PERFORM SAFE COMMENT - 9 Step Behavioral Simulation
+ * 
+ * This function simulates natural user behavior when posting a comment:
+ * 1. Heartbeat (Initialize)
+ * 2. Scroll Newsfeed
+ * 3. View Post (Focus)
+ * 4. Load Old Comments
+ * 5. Start Typing (Broadcast)
+ * 6. Typing Duration (Simulate keystroke time)
+ * 7. Stop Typing (Broadcast)
+ * 8. Send Comment (GraphQL Mutation - CRITICAL STEP)
+ * 9. Heartbeat (Finalize)
+ * 
+ * @param {Object} account - Facebook account with: cookie, fb_dtsg, facebookId, browserFingerprint
+ * @param {Object} postData - Post data with: postId, storyId, feedbackId
+ * @param {String} commentContent - The comment text to post
+ * @returns {Promise<Object>} - { success, message, commentId, error }
+ */
+async function performSafeComment(account, postData, commentContent) {
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`🎬 [9-STEP BEHAVIORAL SIMULATION] START`);
+    console.log(`📝 Comment: "${commentContent.substring(0, 60)}${commentContent.length > 60 ? '...' : ''}"`);
+    console.log(`📌 Post ID: ${postData.postId} | Story ID: ${postData.storyId}`);
+    console.log(`${'='.repeat(80)}\n`);
+
+    try {
+        // ============================================================
+        // BƯỚC 1: Heartbeat (Initialization) - Signal start of session
+        // ============================================================
+        console.log(`[Bước 1/9] 💓 Heartbeat (Start)`);
+        try {
+            await executeGraphQLStep(account, 'Heartbeat-Start', STEP_DOC_IDS.HEARTBEAT_START, {
+                doc_id: STEP_DOC_IDS.HEARTBEAT_START,
+                variables: JSON.stringify({ fb_action_types: 'ua.session_start' })
+            });
+            console.log(`   ✅ Heartbeat sent`);
+        } catch (error) {
+            console.warn(`   ⚠️  Heartbeat warning: ${error.message}`);
+            // Continue - not critical
+        }
+        await randomDelay(0.5, 1.5);
+
+        // ============================================================
+        // BƯỚC 2: Scroll Newsfeed - Simulate scrolling through feed
+        // ============================================================
+        console.log(`[Bước 2/9] 📜 Scroll Newsfeed`);
+        try {
+            await executeGraphQLStep(account, 'Newsfeed-Scroll', STEP_DOC_IDS.NEWSFEED_SCROLL, {
+                doc_id: STEP_DOC_IDS.NEWSFEED_SCROLL,
+                variables: JSON.stringify({ 
+                    count: 5,
+                    cursor: null
+                })
+            });
+            console.log(`   ✅ Scrolled (5 posts loaded)`);
+        } catch (error) {
+            console.warn(`   ⚠️  Scroll warning: ${error.message}`);
+            // Continue - not critical
+        }
+        await randomDelay(3, 5);
+
+        // ============================================================
+        // BƯỚC 3: View Post (Focus) - User opens the specific post
+        // ============================================================
+        console.log(`[Bước 3/9] 🔓 View Post (Focus)`);
+        try {
+            await executeGraphQLStep(account, 'View-Post', STEP_DOC_IDS.OPEN_POST, {
+                doc_id: STEP_DOC_IDS.OPEN_POST,
+                variables: JSON.stringify({
+                    storyID: postData.storyId || postData.postId,
+                    scale: 1
+                })
+            });
+            console.log(`   ✅ Post focused`);
+        } catch (error) {
+            console.warn(`   ⚠️  View post warning: ${error.message}`);
+            // Continue - not critical
+        }
+        await randomDelay(2, 4);
+
+        // ============================================================
+        // BƯỚC 4: Load Existing Comments - Fetch existing comments
+        // ============================================================
+        console.log(`[Bước 4/9] 💬 Load Comments`);
+        try {
+            await executeGraphQLStep(account, 'Load-Comments', STEP_DOC_IDS.LOAD_COMMENTS, {
+                doc_id: STEP_DOC_IDS.LOAD_COMMENTS,
+                variables: JSON.stringify({
+                    id: postData.feedbackId,
+                    count: 5
+                })
+            });
+            console.log(`   ✅ Comments loaded (5 items)`);
+        } catch (error) {
+            console.warn(`   ⚠️  Load comments warning: ${error.message}`);
+            // Continue - not critical
+        }
+        await randomDelay(2, 3);
+
+        // ============================================================
+        // BƯỚC 5: Start Typing - Broadcast typing status to server
+        // ============================================================
+        console.log(`[Bước 5/9] ✍️  Start Typing`);
+        try {
+            const clientMutationId = uuidv4();
+            await executeGraphQLStep(account, 'Start-Typing', STEP_DOC_IDS.START_TYPING, {
+                doc_id: STEP_DOC_IDS.START_TYPING,
+                variables: JSON.stringify({
+                    input: {
+                        feedback_id: postData.feedbackId,
+                        client_mutation_id: clientMutationId
+                    }
+                })
+            });
+            console.log(`   ✅ Typing status: START`);
+        } catch (error) {
+            console.warn(`   ⚠️  Start typing warning: ${error.message}`);
+            // Continue - not critical
+        }
+        await randomDelay(0.5, 1);
+
+        // ============================================================
+        // BƯỚC 6: Simulate Typing Duration
+        // Based on comment length (realistic keystroke simulation)
+        // ============================================================
+        console.log(`[Bước 6/9] ⏱️  Typing Duration`);
+        const typingTime = Math.max(3, commentContent.length * 0.15);
+        console.log(`   ⏳ Comment length: ${commentContent.length} chars`);
+        console.log(`   ⏳ Simulated typing time: ${typingTime.toFixed(2)}s`);
+        await randomDelay(typingTime - 0.5, typingTime + 0.5);
+
+        // ============================================================
+        // BƯỚC 7: Stop Typing - Broadcast typing stopped
+        // ============================================================
+        console.log(`[Bước 7/9] ⏹️  Stop Typing`);
+        try {
+            const clientMutationId = uuidv4();
+            await executeGraphQLStep(account, 'Stop-Typing', STEP_DOC_IDS.STOP_TYPING, {
+                doc_id: STEP_DOC_IDS.STOP_TYPING,
+                variables: JSON.stringify({
+                    input: {
+                        feedback_id: postData.feedbackId,
+                        client_mutation_id: clientMutationId
+                    }
+                })
+            });
+            console.log(`   ✅ Typing status: STOPPED`);
+        } catch (error) {
+            console.warn(`   ⚠️  Stop typing warning: ${error.message}`);
+            // Continue - not critical
+        }
+        await randomDelay(0.5, 1);
+
+        // ============================================================
+        // BƯỚC 8: SEND COMMENT (CRITICAL STEP)
+        // This is the actual mutation to create the comment
+        // ============================================================
+        console.log(`[Bước 8/9] 📤 Send Comment (CRITICAL STEP)`);
+        
+        // Get dynamic doc_id for CREATE_COMMENT
+        const createCommentDocId = await getDynamicDocId('CometUFICreateCommentMutation', null);
+        if (!createCommentDocId) {
+            throw new Error('MISSING_CREATE_COMMENT_DOC_ID: Vui lòng dùng Extension lướt Facebook để thu thập ID này.');
+        }
+        
+        console.log(`   🔑 Using doc_id: ${createCommentDocId}`);
+        
+        try {
+            const clientMutationId = uuidv4();
+            const response = await executeGraphQLStep(account, 'Create-Comment', createCommentDocId, {
+                doc_id: createCommentDocId,
+                variables: JSON.stringify({
+                    input: {
+                        message: {
+                            text: commentContent
+                        },
+                        feedback_id: postData.feedbackId,
+                        client_mutation_id: clientMutationId,
+                        actor_id: account.facebookId,
+                        attachments: null,
+                        formatting_style: null,
+                        is_tracking_encrypted: true,
+                        tracking: []
+                    },
+                    scale: 1,
+                    useDefaultActor: false
+                })
+            });
+            
+            console.log(`   ✅ Comment sent successfully`);
+            console.log(`   📊 Response status: ${response?.status || 'OK'}`);
+            
+        } catch (error) {
+            // This is critical - throw error
+            console.error(`   ❌ FAILED TO SEND COMMENT: ${error.message}`);
+            throw error;
+        }
+        
+        await randomDelay(1, 2);
+
+        // ============================================================
+        // BƯỚC 9: Heartbeat (Finalization) - Signal end of session
+        // ============================================================
+        console.log(`[Bước 9/9] 💓 Heartbeat (End)`);
+        try {
+            await executeGraphQLStep(account, 'Heartbeat-End', STEP_DOC_IDS.HEARTBEAT_END, {
+                doc_id: STEP_DOC_IDS.HEARTBEAT_END,
+                variables: JSON.stringify({ fb_action_types: 'ua.session_end' })
+            });
+            console.log(`   ✅ Heartbeat sent`);
+        } catch (error) {
+            console.warn(`   ⚠️  Heartbeat warning: ${error.message}`);
+            // Continue - not critical
+        }
+        await randomDelay(1, 2);
+
+        // ============================================================
+        // SUCCESS - Return result
+        // ============================================================
+        console.log(`\n${'='.repeat(80)}`);
+        console.log(`✅ [9-STEP PROCESS] COMPLETED SUCCESSFULLY`);
+        console.log(`${'='.repeat(80)}\n`);
+
+        return {
+            success: true,
+            message: 'Comment đã được gửi thành công với mô phỏng 9 bước',
+            postId: postData.postId,
+            commentContent: commentContent,
+            timestamp: new Date().toISOString()
+        };
+
+    } catch (error) {
+        console.error(`\n❌ [9-STEP PROCESS] FAILED`);
+        console.error(`   Error: ${error.message}\n`);
+        
+        return {
+            success: false,
+            error: error.message,
+            postId: postData.postId,
+            timestamp: new Date().toISOString()
+        };
+    }
+}
+
+/**
+ * 📋 GET DYNAMIC DOC ID
+ * 
+ * 3-Step Strategy:
+ * 1. Check Cache (in-memory)
+ * 2. Check Database (FacebookOperation collection)
+ * 3. Fallback to provided default ID
+ * 
+ * @param {String} friendlyName - e.g., "CometUFICreateCommentMutation"
+ * @param {String} defaultId - Fallback doc_id if not found
+ * @returns {Promise<String|null>} - doc_id or null if not found and no default
+ */
+async function getDynamicDocId(friendlyName, defaultId) {
+    console.log(`🔍 [GetDocId] Searching for: ${friendlyName}`);
+    
+    // STEP 1: Check in-memory cache (if available)
+    if (global.docIdCache && global.docIdCache[friendlyName]) {
+        const cachedId = global.docIdCache[friendlyName];
+        console.log(`   ✅ Found in cache: ${cachedId}`);
+        return cachedId;
+    }
+    
+    // STEP 2: Check Database
+    try {
+        const FacebookOperation = require('../models/FacebookOperation');
+        const operation = await FacebookOperation.findOne({ friendlyName }).lean();
+        
+        if (operation && operation.docId) {
+            console.log(`   ✅ Found in DB: ${operation.docId}`);
+            // Update cache
+            if (!global.docIdCache) global.docIdCache = {};
+            global.docIdCache[friendlyName] = operation.docId;
+            return operation.docId;
+        }
+    } catch (dbError) {
+        console.warn(`   ⚠️  DB lookup failed: ${dbError.message}`);
+    }
+    
+    // STEP 3: Fallback to provided default
+    if (defaultId) {
+        console.log(`   ℹ️  Using provided default: ${defaultId}`);
+        return defaultId;
+    }
+    
+    // Not found anywhere
+    console.warn(`   ❌ doc_id not found for: ${friendlyName}`);
+    return null;
+}
+
+/**
+ * 🎯 PROCESS COMMENT QUEUE - Sequential Processing
+ * 
+ * CRITICAL: Process posts sequentially (one by one), NOT in parallel
+ * Each post has a 60-120 second cool-down before the next one
+ * 
+ * @param {Object} account - Facebook account
+ * @param {Array} targetList - List of posts to comment on
+ * @param {Object} config - Configuration { minDelay, maxDelay, commentGenerator }
+ * @returns {Promise<Object>} - { success, totalPosts, successCount, failureCount, results }
+ */
+async function processCommentQueue(account, targetList, config = {}) {
+    const {
+        minDelay = 60,           // Cool-down min (seconds)
+        maxDelay = 120,          // Cool-down max (seconds)
+        commentGenerator = null   // Function to generate comment text
+    } = config;
+
+    console.log(`\n${'*'.repeat(80)}`);
+    console.log(`🚀 [QUEUE] Sequential Comment Processing`);
+    console.log(`📊 Total Posts: ${targetList.length}`);
+    console.log(`👤 Account: ${account.name || account.facebookId}`);
+    console.log(`⏱️  Cool-down: ${minDelay}s - ${maxDelay}s`);
+    console.log(`${'*'.repeat(80)}\n`);
+
+    const results = [];
+    let successCount = 0;
+    let failureCount = 0;
+    const startTime = Date.now();
+
+    // Sequential processing (for...of, NOT Promise.all)
+    for (let i = 0; i < targetList.length; i++) {
+        const target = targetList[i];
+        const currentIndex = i + 1;
+        const totalCount = targetList.length;
+
+        console.log(`\n${'─'.repeat(80)}`);
+        console.log(`[Queue Progress] ${currentIndex}/${totalCount}`);
+        console.log(`Post ID: ${target.postId}`);
+        console.log(`${'─'.repeat(80)}`);
+
+        try {
+            // Generate comment text (if generator provided)
+            let commentText = target.commentContent || 'Great post! 👍';
+            if (commentGenerator && typeof commentGenerator === 'function') {
+                commentText = commentGenerator(target);
+            }
+
+            // Prepare post data
+            const postData = {
+                postId: target.postId,
+                storyId: target.storyId || target.postId,
+                feedbackId: target.feedbackId || Buffer.from(`feedback:${target.postId}`).toString('base64')
+            };
+
+            // Execute 9-step process
+            const result = await performSafeComment(account, postData, commentText);
+
+            if (result.success) {
+                successCount++;
+                results.push(result);
+                console.log(`✅ [Queue] Post ${currentIndex}/${totalCount} - SUCCESS`);
+            } else {
+                failureCount++;
+                results.push(result);
+                console.log(`⚠️  [Queue] Post ${currentIndex}/${totalCount} - FAILED: ${result.error}`);
+            }
+
+        } catch (error) {
+            failureCount++;
+            results.push({
+                success: false,
+                error: error.message,
+                postId: target.postId
+            });
+            console.log(`❌ [Queue] Post ${currentIndex}/${totalCount} - ERROR: ${error.message}`);
+        }
+
+        // Cool-down before next post (except after last post)
+        if (currentIndex < totalCount) {
+            const cooldownSeconds = Math.random() * (maxDelay - minDelay) + minDelay;
+            console.log(`\n⏸️  [Queue] Cool-down: ${cooldownSeconds.toFixed(0)}s before next post...`);
+            await randomDelay(cooldownSeconds - 5, cooldownSeconds + 5);
+        }
+    }
+
+    // Summary
+    const totalDuration = (Date.now() - startTime) / 1000;
+    console.log(`\n${'*'.repeat(80)}`);
+    console.log(`🏁 [QUEUE] Process Complete`);
+    console.log(`📊 Summary:`);
+    console.log(`   ✅ Success: ${successCount}/${totalCount}`);
+    console.log(`   ❌ Failed: ${failureCount}/${totalCount}`);
+    console.log(`   ⏱️  Total duration: ${(totalDuration / 60).toFixed(2)} minutes`);
+    console.log(`${'*'.repeat(80)}\n`);
+
+    return {
+        success: failureCount === 0,
+        totalPosts: totalCount,
+        successCount,
+        failureCount,
+        duration: totalDuration,
+        results
+    };
+}
+
 // Export singleton instance
 const automationService = new CampaignAutomationService();
 
@@ -3648,5 +4429,15 @@ module.exports = {
     FacebookUrlResolver,
     MbasicParser,
     getHeaders,
-    MODERN_HEADERS
+    MODERN_HEADERS,
+    // 9-Step Natural Behavior Automation (v4.0)
+    performSafeComment,
+    processCommentQueue,
+    performNaturalComment: performSafeComment, // Alias for backwards compatibility
+    processSequentialCommentQueue: processCommentQueue, // Alias for backwards compatibility
+    getDynamicDocId,
+    buildDynamicHeaders,
+    randomDelay,
+    sleep,
+    STEP_DOC_IDS
 };

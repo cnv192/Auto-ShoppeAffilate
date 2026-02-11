@@ -1,24 +1,40 @@
 {
   "manifest_version": 3,
   "name": "Shoppe - Facebook Sync",
-  "version": "1.0.5",
-  "description": "Đồng bộ tài khoản Facebook với hệ thống Shoppe Link Management",
+  "version": "2.0.0",
+  "description": "Đồng bộ tài khoản Facebook với hệ thống Shoppe Link Management (v2.0 - Self-Healing)",
 
   "permissions": [
     "scripting",
     "activeTab",
     "tabs",
-    "cookies"
+    "cookies",
+    "storage"
   ],
 
   "host_permissions": [
     "*://*.facebook.com/*",
+    "http://localhost:3000/*",
     "http://localhost:3001/*"
   ],
 
   "background": {
     "service_worker": "bg.js"
   },
+
+  "content_scripts": [
+    {
+      "matches": ["*://*.facebook.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://*.facebook.com/*"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
 
   "action": {},
 
@@ -28,3 +44,4 @@
     "128": "icons/icon128.png"
   }
 }
+

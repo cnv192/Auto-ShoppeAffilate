@@ -1,0 +1,7 @@
+{
+  "name": "shoppe-frontend-next",
+  "displayName": "Shoppe Frontend - Next.js",
+  "description": "Next.js 14+ frontend for Shoppe News Platform",
+  "version": "1.0.0",
+  "private": true
+}

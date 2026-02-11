@@ -252,10 +252,10 @@ LinkSchema.virtual('ctr').get(function() {
     return ((this.validClicks / this.totalClicks) * 100).toFixed(2);
 });
 
-// Full URL
+// Full URL - Use FRONTEND_URL for public links
 LinkSchema.virtual('shortUrl').get(function() {
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
-    return `${baseUrl}/${this.slug}`;
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return `${baseUrl}/go/${this.slug}`;
 });
 
 // =================================================================

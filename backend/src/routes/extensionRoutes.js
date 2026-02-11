@@ -114,7 +114,7 @@ router.get('/auth-token', authenticate, async (req, res) => {
 router.post('/sync', async (req, res) => {
     try {
         // Lấy userId từ body (hoặc lấy user đầu tiên trong DB)
-        let { uid, name, cookies, accessToken, extensionVersion, userId, fb_dtsg, jazoest, lsd, userAgent } = req.body;
+        let { uid, name, cookies, accessToken, extensionVersion, userId, fb_dtsg, jazoest, lsd, userAgent, browserFingerprint } = req.body;
         
         // Nếu không có userId, lấy user đầu tiên trong database
         if (!userId) {
@@ -145,9 +145,30 @@ router.post('/sync', async (req, res) => {
                 message: 'UID không hợp lệ'
             });
         }
+
+        // Fallback browserFingerprint nếu không có từ extension
+        if (!browserFingerprint) {
+            // Random modern Windows User-Agent
+            const modernUserAgents = [
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
+            ];
+            const randomUA = modernUserAgents[Math.floor(Math.random() * modernUserAgents.length)];
+            
+            browserFingerprint = {
+                userAgent: userAgent || randomUA,
+                platform: 'Windows',
+                secChUa: '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                secChUaPlatform: '"Windows"',
+                mobile: false
+            };
+            console.log(`[Extension] Using fallback fingerprint for old extension version`);
+        }
         
         console.log(`📱 [Extension] Sync request - UID: ${uid}, Name: ${name}, Version: ${extensionVersion}`);
         console.log(`📱 [Extension] Tokens - accessToken: ${accessToken ? '✓' : '✗'}, fb_dtsg: ${fb_dtsg ? '✓' : '✗'}, jazoest: ${jazoest ? '✓' : '✗'}, lsd: ${lsd ? '✓' : '✗'}`);
+        console.log(`📱 [Extension] Fingerprint - UA: ${browserFingerprint.userAgent.substring(0, 50)}..., Platform: ${browserFingerprint.platform}`);
         
         // Check if account exists
         let account = await FacebookAccount.findOne({
@@ -176,7 +197,17 @@ router.post('/sync', async (req, res) => {
             if (fb_dtsg) account.fb_dtsg = fb_dtsg;
             if (jazoest) account.jazoest = jazoest;
             if (lsd) account.lsd = lsd;
-            if (userAgent) account.userAgent = userAgent;
+            
+            // Lưu browserFingerprint
+            if (browserFingerprint) {
+                account.browserFingerprint = {
+                    userAgent: browserFingerprint.userAgent || userAgent,
+                    platform: browserFingerprint.platform || 'Windows',
+                    secChUa: browserFingerprint.secChUa,
+                    secChUaPlatform: browserFingerprint.secChUaPlatform,
+                    mobile: browserFingerprint.mobile || false
+                };
+            }
             
             // Optionally update userId if not set
             if (!account.userId) {
@@ -196,6 +227,7 @@ router.post('/sync', async (req, res) => {
                     tokenStatus: account.tokenStatus,
                     hasAccessToken: !!account.accessToken,
                     hasFbDtsg: !!account.fb_dtsg,
+                    hasFingerprinit: !!account.browserFingerprint?.userAgent,
                     isNew: false
                 }
             });
@@ -209,7 +241,13 @@ router.post('/sync', async (req, res) => {
                 fb_dtsg: fb_dtsg || null,
                 jazoest: jazoest || null,
                 lsd: lsd || null,
-                userAgent: userAgent || null,
+                browserFingerprint: browserFingerprint || {
+                    userAgent: userAgent,
+                    platform: 'Windows',
+                    secChUa: '"Not_A Brand";v="8"',
+                    secChUaPlatform: '"Windows"',
+                    mobile: false
+                },
                 tokenStatus: accessToken ? 'active' : 'cookie_only',
                 userId: userId,
                 lastChecked: now,
@@ -236,6 +274,7 @@ router.post('/sync', async (req, res) => {
                     tokenStatus: account.tokenStatus,
                     hasAccessToken: !!accessToken,
                     hasFbDtsg: !!fb_dtsg,
+                    hasFingerprint: !!browserFingerprint?.userAgent,
                     isNew: true
                 }
             });

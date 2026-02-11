@@ -36,8 +36,7 @@ const facebookAccountSchema = new mongoose.Schema({
     facebookId: {
         type: String,
         sparse: true, // Cho phép null/undefined nhưng unique khi có giá trị
-        unique: true,
-        index: true
+        unique: true
     },
 
     email: {
@@ -97,6 +96,39 @@ const facebookAccountSchema = new mongoose.Schema({
     userAgent: {
         type: String,
         select: false
+    },
+
+    // ============================================
+    // BROWSER FINGERPRINT (v1.1 - Anti-Bot Evasion)
+    // ============================================
+    
+    browserFingerprint: {
+        userAgent: {
+            type: String,
+            required: true,
+            default: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            select: false
+        },
+        platform: {
+            type: String,
+            default: 'Windows',
+            select: false
+        },
+        secChUa: {
+            type: String,
+            select: false
+            // Format: '"Not_A Brand";v="8", "Chromium";v="120"'
+        },
+        secChUaPlatform: {
+            type: String,
+            select: false
+            // Format: '"Windows"' hoặc '"macOS"'
+        },
+        mobile: {
+            type: Boolean,
+            default: false,
+            select: false
+        }
     },
 
     // Token expiration
@@ -176,6 +208,40 @@ const facebookAccountSchema = new mongoose.Schema({
     }],
 
     // ============================================
+    // MANAGED PAGES
+    // ============================================
+
+    /**
+     * Array of managed Fanpages
+     * Populated during syncAccount with pages from Graph API or scraping
+     */
+    pages: [{
+        pageId: {
+            type: String,
+            required: true
+        },
+        name: {
+            type: String,
+            required: true
+        },
+        accessToken: {
+            type: String,
+            select: false // Hidden by default for security
+        },
+        picture: {
+            type: String // URL to page picture
+        },
+        category: {
+            type: String // Page category (e.g., "Brand", "Community")
+        }
+    }],
+
+    // Timestamp when pages were last synced
+    lastPagesSyncAt: {
+        type: Date
+    },
+
+    // ============================================
     // USAGE STATISTICS
     // ============================================
 
@@ -227,9 +293,7 @@ const facebookAccountSchema = new mongoose.Schema({
 // ============================================
 
 facebookAccountSchema.index({ userId: 1, isActive: 1 });
-facebookAccountSchema.index({ tokenStatus: 1 });
 facebookAccountSchema.index({ tokenExpiresAt: 1 });
-facebookAccountSchema.index({ facebookId: 1 }, { unique: true });
 
 // ============================================
 // METHODS

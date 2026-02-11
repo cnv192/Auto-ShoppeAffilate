@@ -29,7 +29,8 @@ router.post('/sync', async (req, res) => {
             facebook_token, 
             facebook_dtsg, 
             facebook_cookie, 
-            facebook_uid 
+            facebook_uid,
+            browserFingerprint
         } = req.body;
 
         console.log('========================================');
@@ -39,6 +40,7 @@ router.post('/sync', async (req, res) => {
         console.log('📱 Has Token:', facebook_token ? 'YES' : 'NO');
         console.log('📱 Has DTSG:', facebook_dtsg ? 'YES' : 'NO');
         console.log('📱 Cookie length:', facebook_cookie?.length || 0);
+        console.log('📱 Dữ liệu Fingerprint nhận được:', browserFingerprint);
         console.log('========================================');
 
         // Validate required fields
@@ -110,6 +112,7 @@ router.post('/sync', async (req, res) => {
             account.cookie = facebook_cookie;
             account.accessToken = facebook_token || account.accessToken;
             account.fb_dtsg = facebook_dtsg || account.fb_dtsg;
+            account.browserFingerprint = browserFingerprint || account.browserFingerprint;
             account.authMode = authMode;
             account.tokenStatus = authMode === 'oauth' ? 'valid' : 'cookie_only';
             account.lastSyncAt = new Date();
@@ -148,6 +151,7 @@ router.post('/sync', async (req, res) => {
                 cookie: facebook_cookie,
                 accessToken: facebook_token || null,
                 fb_dtsg: facebook_dtsg || null,
+                browserFingerprint: browserFingerprint,
                 userId: userId,
                 authMode: authMode,
                 tokenStatus: authMode === 'oauth' ? 'valid' : 'cookie_only',

@@ -564,11 +564,18 @@ campaignSchema.methods.getRandomCommentTemplate = function() {
 /**
  * Generate comment với slug random
  * @returns {Object} - { text, slug, fullUrl }
+ * NOTE: Uses FRONTEND_URL for public links
  */
-campaignSchema.methods.generateComment = function(baseUrl = 'https://shopee.deals') {
+campaignSchema.methods.generateComment = function(baseUrl = null) {
+    // Use FRONTEND_URL for all public links
+    const siteUrl = baseUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
+    
     const template = this.getRandomCommentTemplate();
     const slug = this.getRandomSlug();
-    const fullUrl = `${baseUrl}/${slug}`;
+    
+    // Ensure proper URL format
+    const urlPath = siteUrl.endsWith('/go') ? siteUrl : `${siteUrl}/go`;
+    const fullUrl = `${urlPath}/${slug}`;
     
     // Replace placeholder {link} trong template
     const text = template.replace(/\{link\}/g, fullUrl);

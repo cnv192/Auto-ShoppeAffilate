@@ -15,7 +15,14 @@
 const express = require('express');
 const router = express.Router();
 const { smartRoutingMiddleware } = require('../middleware/smartRouting');
-const { renderArticle, renderPreview } = require('../controllers/renderController');
+const { renderArticle, renderHomepage, renderPreview } = require('../controllers/renderController');
+
+/**
+ * GET / or /home
+ * Homepage route with meta injection
+ */
+router.get('/', renderHomepage);
+router.get('/home', renderHomepage);
 
 /**
  * GET /:slug

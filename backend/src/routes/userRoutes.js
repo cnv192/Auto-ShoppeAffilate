@@ -20,7 +20,7 @@ router.get('/profile', authenticate, async (req, res) => {
     try {
         const user = await User.findById(req.user._id)
             .select('-password');
-        
+
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -33,8 +33,9 @@ router.get('/profile', authenticate, async (req, res) => {
             data: {
                 _id: user._id,
                 username: user.username,
-                displayName: user.displayName,
+                displayName: user.fullName || user.displayName, // Map fullName to displayName
                 email: user.email,
+                phone: user.phone,
                 avatar: user.avatar,
                 role: user.role,
                 createdAt: user.createdAt,
@@ -56,8 +57,8 @@ router.get('/profile', authenticate, async (req, res) => {
  */
 router.put('/profile', authenticate, async (req, res) => {
     try {
-        const { displayName, email, avatar } = req.body;
-        
+        const { displayName, email, phone, avatar } = req.body;
+
         const user = await User.findById(req.user._id);
         if (!user) {
             return res.status(404).json({
@@ -67,8 +68,9 @@ router.put('/profile', authenticate, async (req, res) => {
         }
 
         // Cập nhật các field được phép
-        if (displayName !== undefined) user.displayName = displayName;
+        if (displayName !== undefined) user.fullName = displayName; // Update fullName
         if (email !== undefined) user.email = email;
+        if (phone !== undefined) user.phone = phone;
         if (avatar !== undefined) user.avatar = avatar;
 
         await user.save();
@@ -77,8 +79,9 @@ router.put('/profile', authenticate, async (req, res) => {
             success: true,
             message: 'Cập nhật thành công',
             data: {
-                displayName: user.displayName,
+                displayName: user.fullName,
                 email: user.email,
+                phone: user.phone,
                 avatar: user.avatar
             }
         });

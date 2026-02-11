@@ -27,6 +27,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const cloudinaryRoutes = require('./routes/cloudinaryRoutes');
 const userRoutes = require('./routes/userRoutes');
 const resourceSetRoutes = require('./routes/resourceSetRoutes');
+const affiliateRedirectRoutes = require('./routes/affiliateRedirectRoutes');
 const { createSampleData } = require('./services/linkServiceMongo');
 const { ipFilterMiddleware, getDatabaseStatus } = require('./middleware/ipFilter');
 const User = require('./models/User');
@@ -40,15 +41,28 @@ const PORT = process.env.PORT || 3001;
 // =================================================================
 
 // CORS - Cho phép Frontend và Extension truy cập API
+// Production: Chỉ dùng CORS_ORIGINS từ .env
+// Development: Cho phép localhost
 app.use(cors({
     origin: function(origin, callback) {
-        const allowedOrigins = [
+        // Production origins from .env (comma-separated)
+        const envOrigins = process.env.CORS_ORIGINS 
+            ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+            : [];
+        
+        // Development origins (only used when NODE_ENV !== production)
+        const devOrigins = process.env.NODE_ENV !== 'production' ? [
             'http://localhost:3000',
             'http://localhost:3001',
             'http://localhost:5173',
             'http://127.0.0.1:3000',
             'http://127.0.0.1:3001',
-            'http://127.0.0.1:5173',
+            'http://127.0.0.1:5173'
+        ] : [];
+        
+        const allowedOrigins = [
+            ...envOrigins,
+            ...devOrigins,
             process.env.FRONTEND_URL
         ].filter(Boolean);
         
@@ -136,11 +150,22 @@ app.use('/api/accounts', accountRoutes);
 const extensionRoutes = require('./routes/extensionRoutes');
 app.use('/api/extension', extensionRoutes);
 
+// Facebook Operations Routes - Capture dynamic doc_ids from Extension
+const operationRoutes = require('./routes/operationRoutes');
+app.use('/api/facebook-operations', operationRoutes);
+
+// Automation Routes - Dynamic behavior simulation & execution plans
+const automationRoutes = require('./routes/automationRoutes');
+app.use('/api/automations', automationRoutes);
+
 // Upload Routes - Upload & optimize hình ảnh (local)
 app.use('/api/upload/local', uploadRoutes);
 
 // Cloudinary Upload Routes - Upload lên Cloudinary
 app.use('/api/upload', cloudinaryRoutes);
+
+// Affiliate Redirect Routes - /go/:slug và /stats (merged from bridge-server)
+app.use('/', affiliateRedirectRoutes);
 
 // Debug Routes - Chỉ trong development
 if (process.env.NODE_ENV === 'development') {
@@ -215,9 +240,16 @@ const startServer = async () => {
         console.log('👤 Initializing default admin user...');
         await User.createDefaultAdmin('admin', '123456');
         
-        // Start campaign scheduler
-        console.log('🕐 Starting campaign scheduler...');
+        // Start Campaign Scheduler (merged from bridge-server)
+        console.log('');
+        console.log('🤖 ════════════════════════════════════════════════════');
+        console.log('🤖 INITIALIZING CAMPAIGN AUTOMATION');
+        console.log('🤖 ════════════════════════════════════════════════════');
         campaignScheduler.start();
+        console.log('🤖 Campaign Scheduler started successfully');
+        console.log('🤖 - Checks active campaigns every 5 minutes');
+        console.log('🤖 - Checks expired tokens every 1 hour');
+        console.log('🤖 ════════════════════════════════════════════════════');
         
         // Start server
         app.listen(PORT, () => {
@@ -228,6 +260,8 @@ const startServer = async () => {
             console.log('');
             console.log('📋 Endpoints:');
             console.log(`   - Health Check:      http://localhost:${PORT}/health`);
+            console.log(`   - Statistics:        http://localhost:${PORT}/stats`);
+            console.log(`   - Affiliate Redirect: http://localhost:${PORT}/go/:slug`);
             console.log(`   - API Links:         http://localhost:${PORT}/api/links`);
             console.log(`   - Auth/Login:        http://localhost:${PORT}/api/auth/login`);
             console.log(`   - Campaigns:         http://localhost:${PORT}/api/campaigns`);
@@ -246,7 +280,16 @@ const startServer = async () => {
             console.log('');
             console.log('🔒 IP Filter: Kiểm tra IP từ sample.bin.db11');
             console.log('📊 MongoDB: Lưu trữ và tracking clicks');
-            console.log('🤖 Campaign Scheduler: Active (runs every 5 minutes)');
+            console.log('');
+            console.log('🔗 Affiliate Redirect (merged from bridge-server):');
+            console.log(`   - http://localhost:${PORT}/go/flash50`);
+            console.log('   - Referrer washing enabled (no-referrer)');
+            console.log('   - Async click tracking');
+            console.log('');
+            console.log('🤖 Campaign Automation:');
+            console.log('   - Status: Running (integrated)');
+            console.log('   - Scheduler: Checks every 5 minutes');
+            console.log('   - Execution: Comment automation on configured posts');
             console.log('');
         });
         
