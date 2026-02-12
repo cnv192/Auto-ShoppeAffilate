@@ -2123,12 +2123,19 @@ class FacebookAPI {
 /**
  * Campaign Automation Service
  * 
- * STRICT WORKFLOW v4.0:
+ * STRICT WORKFLOW v4.1:
  * - Step A: Determine Source (Priority: Targets > Random NewsFeed)
  * - Step B: Pre-filter by DB (efficiency check before stats fetch)
  * - Step C: Sequential "Focus" Processing (exhaust one post before moving to next)
+ * - Step D: 9-Step Natural Behavior Simulation per comment (performSafeComment)
+ * - Step E: BehaviorService injection (casual browsing between posts)
  */
+const BehaviorService = require('./BehaviorService');
+
 class CampaignAutomationService {
+    constructor() {
+        this.behaviorService = new BehaviorService();
+    }
     /**
      * Process một campaign active
      * 
@@ -2318,9 +2325,21 @@ class CampaignAutomationService {
                 
                 // ============================================
                 // STEP 3: FOCUS LOOP - Post ALL comments to this post
+                // Using 9-Step Natural Behavior Simulation + BehaviorService
                 // ============================================
                 const remainingComments = maxCommentsPerPost - commentsSentToPost;
                 console.log(`\n   🔄 FOCUS LOOP: Need to post ${remainingComments} more comment(s)`);
+                
+                // Load behavioral operations for injection between actions
+                let behavioralOps = [];
+                let lowPriorityOps = [];
+                try {
+                    behavioralOps = await this.behaviorService.loadBehavioralOperations(['high', 'medium']);
+                    lowPriorityOps = await this.behaviorService.loadLowPriorityOperations();
+                    console.log(`   🧬 Loaded ${behavioralOps.length} behavioral + ${lowPriorityOps.length} casual ops for injection`);
+                } catch (behaviorError) {
+                    console.log(`   ⚠️ BehaviorService load failed (non-critical): ${behaviorError.message}`);
+                }
                 
                 for (let i = 0; i < remainingComments; i++) {
                     // Safety checks before each comment
@@ -2336,6 +2355,44 @@ class CampaignAutomationService {
                     }
                     
                     console.log(`\n   📝 Comment ${i + 1}/${remainingComments} for post ${postId}:`);
+                    
+                    // ── Inject casual browsing behavior BEFORE commenting ──
+                    if (lowPriorityOps.length > 0) {
+                        const casualInjection = this.behaviorService.injectRandomBehavior([...lowPriorityOps]);
+                        if (casualInjection.injected > 0) {
+                            console.log(`   🌀 Injecting ${casualInjection.injected} casual browsing action(s)...`);
+                            for (const op of casualInjection.operations) {
+                                try {
+                                    await executeGraphQLStep(fbAccount, `Casual-${op.friendlyName}`, op.docId, {
+                                        doc_id: op.docId,
+                                        variables: JSON.stringify({})
+                                    });
+                                    console.log(`   🌀 ✅ ${op.friendlyName}`);
+                                    await sleep(op.delay || 1000);
+                                } catch (casualErr) {
+                                    console.log(`   🌀 ⚠️ ${op.friendlyName} failed (non-critical)`);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // ── Inject behavioral operation (high/medium priority) ──
+                    if (behavioralOps.length > 0 && (i % 2 === 0)) {
+                        const injected = this.behaviorService.injectBehavioralOperation([...behavioralOps], 1);
+                        if (injected.length > 0) {
+                            console.log(`   🧬 Injecting behavioral action: ${injected[0].friendlyName}`);
+                            try {
+                                await executeGraphQLStep(fbAccount, `Behavioral-${injected[0].friendlyName}`, injected[0].docId, {
+                                    doc_id: injected[0].docId,
+                                    variables: JSON.stringify({})
+                                });
+                                console.log(`   🧬 ✅ ${injected[0].friendlyName}`);
+                                await sleep(injected[0].delay || 2000);
+                            } catch (behaviorErr) {
+                                console.log(`   🧬 ⚠️ ${injected[0].friendlyName} failed (non-critical)`);
+                            }
+                        }
+                    }
                     
                     // Generate comment
                     const commentData = latestCampaign.generateComment();
@@ -2375,21 +2432,67 @@ class CampaignAutomationService {
                     
                     console.log(`   💬 Mode: ${commentMode} | Message: ${finalMessage.substring(0, 50)}...`);
                     
-                    // Post comment
+                    // ══════════════════════════════════════════════════════
+                    // 🎬 9-STEP NATURAL BEHAVIOR SIMULATION (performSafeComment)
+                    // Instead of calling postCommentWithCookie directly,
+                    // we go through the full 9-step process:
+                    // Heartbeat → Scroll → View Post → Load Comments → 
+                    // Start Typing → Typing Duration → Stop Typing → 
+                    // Send Comment → Heartbeat End
+                    // ══════════════════════════════════════════════════════
                     let result;
-                    if (isCookieOnly) {
-                        result = await fbAPI.postCommentWithCookie(postId, finalMessage, fbAccount.fb_dtsg, {
-                            groupId,
-                            postUrl,
-                            parentCommentId: targetCommentId,
-                            targetName: replyName
-                        });
-                    } else {
+                    try {
+                        const postDataForSafe = {
+                            postId: postId,
+                            storyId: postId,
+                            feedbackId: Buffer.from(`feedback:${postId}`).toString('base64'),
+                            postUrl: postUrl,
+                            groupId: groupId
+                        };
+                        
+                        console.log(`   🎬 Using 9-Step Behavioral Simulation...`);
+                        const safeResult = await performSafeComment(fbAccount, postDataForSafe, finalMessage);
+                        
+                        if (safeResult.success) {
+                            result = {
+                                success: true,
+                                id: `safe_${postId}_${Date.now()}`,
+                                message: finalMessage,
+                                mode: commentMode,
+                                simulation: '9-step'
+                            };
+                        } else {
+                            // 9-step failed, fallback to direct method
+                            console.log(`   ⚠️ 9-Step failed: ${safeResult.error}, falling back to direct comment...`);
+                            if (isCookieOnly) {
+                                result = await fbAPI.postCommentWithCookie(postId, finalMessage, fbAccount.fb_dtsg, {
+                                    groupId,
+                                    postUrl,
+                                    parentCommentId: targetCommentId,
+                                    targetName: replyName
+                                });
+                            } else {
+                                const comment = await fbAPI.postComment(postId, finalMessage);
+                                result = { success: true, id: comment.id, message: finalMessage };
+                            }
+                        }
+                    } catch (safeError) {
+                        console.log(`   ⚠️ 9-Step exception: ${safeError.message}, falling back to direct comment...`);
+                        // Fallback to direct method
                         try {
-                            const comment = await fbAPI.postComment(postId, commentData.text);
-                            result = { success: true, id: comment.id, message: commentData.text };
-                        } catch (error) {
-                            result = { success: false, error: error.message };
+                            if (isCookieOnly) {
+                                result = await fbAPI.postCommentWithCookie(postId, finalMessage, fbAccount.fb_dtsg, {
+                                    groupId,
+                                    postUrl,
+                                    parentCommentId: targetCommentId,
+                                    targetName: replyName
+                                });
+                            } else {
+                                const comment = await fbAPI.postComment(postId, finalMessage);
+                                result = { success: true, id: comment.id, message: finalMessage };
+                            }
+                        } catch (fallbackError) {
+                            result = { success: false, error: fallbackError.message };
                         }
                     }
                     
