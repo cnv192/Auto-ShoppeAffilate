@@ -706,6 +706,7 @@ export default function BannersPage() {
                                 boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
                                 border: '2px solid #D31016'
                             }}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                     src={imagePreview}
                                     alt="Preview"
