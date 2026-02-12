@@ -273,18 +273,15 @@ export default function CampaignsPage() {
             description: campaign.description,
             facebookAccountId: campaign.facebookAccountId?._id || campaign.facebookAccountId,
             slugs: campaign.slugs || [],
-            commentSetId: undefined,
-            commentTemplates: campaign.commentTemplates?.join('\n'),
+            commentSetIds: [],
+            groupSetIds: [],
+            pageSetIds: [],
             startTime: campaign.startTime ? dayjs(campaign.startTime, 'HH:mm') : dayjs('08:00', 'HH:mm'),
             durationHours: campaign.durationHours || 5,
             maxCommentsPerPost: campaign.maxCommentsPerPost || 1,
             delayMin: campaign.delayMin || 30,
             delayMax: campaign.delayMax || 60,
             targetPostIds: campaign.targetPostIds?.join('\n'),
-            groupSetId: undefined,
-            linkGroups: campaign.linkGroups?.join('\n'),
-            pageSetId: undefined,
-            fanpages: campaign.fanpages?.join('\n'),
         });
         fetchModalData();
         setModalVisible(true);
@@ -295,20 +292,34 @@ export default function CampaignsPage() {
             const values = await form.validateFields();
             setSaving(true);
 
+            // Gộp nội dung từ các bộ mẫu đã chọn
+            const selectedComments = (values.commentSetIds || []).flatMap((id: string) => {
+                const set = commentSets.find(s => s._id === id);
+                return set?.content || [];
+            });
+            const selectedGroups = (values.groupSetIds || []).flatMap((id: string) => {
+                const set = groupSets.find(s => s._id === id);
+                return set?.content || [];
+            });
+            const selectedPages = (values.pageSetIds || []).flatMap((id: string) => {
+                const set = pageSets.find(s => s._id === id);
+                return set?.content || [];
+            });
+
             const payload = {
                 name: values.name,
                 description: values.description,
                 facebookAccountId: values.facebookAccountId,
                 slugs: Array.isArray(values.slugs) ? values.slugs : [],
-                commentTemplates: values.commentTemplates, // backend parseListInput xử lý
+                commentTemplates: selectedComments,
                 startTime: values.startTime ? dayjs(values.startTime).format('HH:mm') : '08:00',
                 durationHours: values.durationHours,
                 maxCommentsPerPost: values.maxCommentsPerPost,
                 delayMin: values.delayMin,
                 delayMax: values.delayMax,
                 targetPostIds: values.targetPostIds || '',
-                linkGroups: values.linkGroups || '',
-                fanpages: values.fanpages || '',
+                linkGroups: selectedGroups,
+                fanpages: selectedPages,
             };
 
             if (editingCampaign) {
@@ -789,35 +800,25 @@ export default function CampaignsPage() {
                         </Select>
                     </Form.Item>
 
-                    {/* Comment Templates - chọn từ bộ mẫu hoặc nhập tay */}
-                    <Form.Item label="Mẫu Comment">
+                    {/* Comment Templates - chọn bộ mẫu */}
+                    <Form.Item
+                        name="commentSetIds"
+                        label="Bộ mẫu Comment"
+                        rules={[{ required: true, message: 'Chọn ít nhất 1 bộ mẫu comment' }]}
+                    >
                         <Select
-                            placeholder="Chọn từ bộ mẫu comment đã lưu..."
+                            mode="multiple"
+                            placeholder="Chọn bộ mẫu comment..."
                             allowClear
-                            onChange={(setId: string) => {
-                                const set = commentSets.find(s => s._id === setId);
-                                if (set && set.content) {
-                                    form.setFieldsValue({ commentTemplates: set.content.join('\n') });
-                                }
-                            }}
-                            style={{ marginBottom: 8 }}
+                            optionFilterProp="label"
+                            showSearch
                         >
                             {commentSets.map(set => (
-                                <Select.Option key={set._id} value={set._id}>
+                                <Select.Option key={set._id} value={set._id} label={set.name}>
                                     {set.name} ({set.content?.length || 0} mẫu)
                                 </Select.Option>
                             ))}
                         </Select>
-                    </Form.Item>
-                    <Form.Item
-                        name="commentTemplates"
-                        rules={[{ required: true, message: 'Cần có ít nhất 1 mẫu comment' }]}
-                    >
-                        <Input.TextArea
-                            placeholder={`Mỗi dòng 1 mẫu, dùng {link} để chèn link, {name} để chèn tên:\nDeal hot! 🔥 {link}\nGiá tốt lắm: {link}`}
-                            rows={5}
-                            style={{ fontFamily: 'monospace' }}
-                        />
                     </Form.Item>
 
                     {/* Target Post IDs - nhập tay */}
@@ -875,52 +876,44 @@ export default function CampaignsPage() {
                         </Col>
                     </Row>
 
-                    {/* Groups - chọn từ bộ mẫu hoặc nhập tay */}
-                    <Form.Item label="Nguồn Group Facebook">
+                    {/* Groups - chọn bộ group */}
+                    <Form.Item
+                        name="groupSetIds"
+                        label="Bộ Group Facebook"
+                    >
                         <Select
-                            placeholder="Chọn từ bộ group đã lưu..."
+                            mode="multiple"
+                            placeholder="Chọn bộ group..."
                             allowClear
-                            onChange={(setId: string) => {
-                                const set = groupSets.find(s => s._id === setId);
-                                if (set && set.content) {
-                                    form.setFieldsValue({ linkGroups: set.content.join('\n') });
-                                }
-                            }}
-                            style={{ marginBottom: 8 }}
+                            optionFilterProp="label"
+                            showSearch
                         >
                             {groupSets.map(set => (
-                                <Select.Option key={set._id} value={set._id}>
+                                <Select.Option key={set._id} value={set._id} label={set.name}>
                                     {set.name} ({set.content?.length || 0} groups)
                                 </Select.Option>
                             ))}
                         </Select>
                     </Form.Item>
-                    <Form.Item name="linkGroups">
-                        <Input.TextArea placeholder="Mỗi dòng 1 URL group Facebook" rows={3} style={{ fontFamily: 'monospace' }} />
-                    </Form.Item>
 
-                    {/* Fanpages - chọn từ bộ mẫu hoặc nhập tay */}
-                    <Form.Item label="Nguồn Fanpage">
+                    {/* Fanpages - chọn bộ fanpage */}
+                    <Form.Item
+                        name="pageSetIds"
+                        label="Bộ Fanpage"
+                    >
                         <Select
-                            placeholder="Chọn từ bộ fanpage đã lưu..."
+                            mode="multiple"
+                            placeholder="Chọn bộ fanpage..."
                             allowClear
-                            onChange={(setId: string) => {
-                                const set = pageSets.find(s => s._id === setId);
-                                if (set && set.content) {
-                                    form.setFieldsValue({ fanpages: set.content.join('\n') });
-                                }
-                            }}
-                            style={{ marginBottom: 8 }}
+                            optionFilterProp="label"
+                            showSearch
                         >
                             {pageSets.map(set => (
-                                <Select.Option key={set._id} value={set._id}>
+                                <Select.Option key={set._id} value={set._id} label={set.name}>
                                     {set.name} ({set.content?.length || 0} pages)
                                 </Select.Option>
                             ))}
                         </Select>
-                    </Form.Item>
-                    <Form.Item name="fanpages">
-                        <Input.TextArea placeholder="Mỗi dòng 1 URL fanpage Facebook" rows={3} style={{ fontFamily: 'monospace' }} />
                     </Form.Item>
                 </Form>
             </Modal>
