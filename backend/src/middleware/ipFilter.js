@@ -642,6 +642,24 @@ const ipFilterMiddleware = (options = {}) => {
         if (req.path.startsWith('/api/')) {
             return next();
         }
+
+        // Bỏ qua Social Media Preview Bots (Facebook, Twitter, Zalo, etc.)
+        // Các bot này cần crawl OG meta tags để hiển thị preview khi share link
+        // Chúng sẽ được smartRoutingMiddleware xử lý riêng ở downstream
+        const userAgent = (req.headers['user-agent'] || '').toLowerCase();
+        const SOCIAL_PREVIEW_BOTS = [
+            'facebookexternalhit', 'facebookcatalog', 'facebot',
+            'twitterbot', 'linkedinbot', 'telegrambot', 'discordbot',
+            'slackbot', 'whatsapp', 'pinterest', 'skypeuripreview',
+            'line-poker', 'zalo', 'googlebot',
+            'google-structured-data-testing-tool'
+        ];
+        if (SOCIAL_PREVIEW_BOTS.some(bot => userAgent.includes(bot))) {
+            if (logAll) {
+                console.log(`✅ [IP Filter] Social bot bypass: ${clientIP} | UA: ${userAgent.substring(0, 60)}`);
+            }
+            return next();
+        }
         
         // Phân tích IP
         const analysis = analyzeIP(clientIP);

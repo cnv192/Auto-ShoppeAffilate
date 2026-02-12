@@ -11,6 +11,25 @@ const router = express.Router();
 const linkService = require('../services/linkServiceMongo');
 const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const Link = require('../models/Link');
+const UploadService = require('../services/uploadService');
+
+/**
+ * Helper: Nếu imageUrl là base64 data URL, upload lên Cloudinary và trả về URL thật
+ */
+async function resolveImageUrl(imageUrl) {
+    if (imageUrl && imageUrl.startsWith('data:')) {
+        try {
+            console.log('🔄 [LinkRoutes] Converting base64 image to Cloudinary URL...');
+            const result = await UploadService.uploadBase64(imageUrl, 'articles/covers');
+            console.log('✅ [LinkRoutes] Cloudinary URL:', result.secureUrl);
+            return result.secureUrl;
+        } catch (error) {
+            console.error('❌ [LinkRoutes] Failed to upload base64 to Cloudinary:', error.message);
+            return imageUrl; // Fallback: giữ nguyên base64 nếu upload thất bại
+        }
+    }
+    return imageUrl;
+}
 
 /**
  * GET /api/links/public
@@ -251,11 +270,14 @@ router.post('/', authenticate, async (req, res) => {
             }
         }
         
+        // Convert base64 imageUrl to Cloudinary URL if needed
+        const resolvedImageUrl = await resolveImageUrl(imageUrl);
+
         // Pass all fields to service
         const link = await linkService.createLink({
             title,
             targetUrl,
-            imageUrl,
+            imageUrl: resolvedImageUrl,
             customSlug,
             description,
             content,
@@ -322,12 +344,15 @@ router.put('/:slug', async (req, res) => {
             }
         }
         
+        // Convert base64 imageUrl to Cloudinary URL if needed
+        const resolvedImageUrl = imageUrl !== undefined ? await resolveImageUrl(imageUrl) : undefined;
+
         // Build update object - only include fields that are provided (not undefined)
         const updateData = {};
         if (title !== undefined) updateData.title = title;
         if (customSlug !== undefined) updateData.slug = customSlug.toLowerCase();
         if (targetUrl !== undefined) updateData.targetUrl = targetUrl;
-        if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+        if (resolvedImageUrl !== undefined) updateData.imageUrl = resolvedImageUrl;
         if (isActive !== undefined) updateData.isActive = isActive;
         if (description !== undefined) updateData.description = description;
         if (content !== undefined) updateData.content = content;

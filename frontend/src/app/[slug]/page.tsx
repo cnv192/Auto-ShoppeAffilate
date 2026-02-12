@@ -47,7 +47,20 @@ export async function generateMetadata(
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.tintuc24h.site'
   const url = `${siteUrl}/${params.slug}`
-  const imageUrl = article.imageUrl || article.thumbnail
+  
+  // Lấy image URL - bỏ qua base64 data URLs vì Facebook không crawl được
+  let imageUrl = article.imageUrl || article.thumbnail
+  if (imageUrl && imageUrl.startsWith('data:')) {
+    imageUrl = null
+  }
+  
+  // Nếu không có imageUrl hợp lệ, thử trích xuất ảnh đầu tiên từ content bài viết
+  if (!imageUrl && article.content) {
+    const imgMatch = article.content.match(/https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|webp|gif|avif)/i)
+    if (imgMatch) {
+      imageUrl = imgMatch[0]
+    }
+  }
   
   // Fallback description: nếu rỗng, tạo từ title
   const description = article.description && article.description.trim()

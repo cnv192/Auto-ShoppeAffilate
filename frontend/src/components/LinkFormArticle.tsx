@@ -188,16 +188,33 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
             try {
                 setImageLoading(true);
                 
-                // Simple base64 encoding for preview (in production, upload to Cloudinary)
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const imageDataUrl = e.target?.result as string;
-                    setPreviewImage(imageDataUrl);
-                    form.setFieldValue('imageUrl', imageDataUrl);
-                    setImageLoading(false);
-                    message.success('Ảnh đã được chọn!');
-                };
-                reader.readAsDataURL(fileToUpload);
+                // Upload to Cloudinary via backend API
+                const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+                const formData = new FormData();
+                formData.append('file', fileToUpload);
+                
+                const token = typeof window !== 'undefined' ? localStorage.getItem('shoppe_auth_token') : null;
+                const res = await fetch(`${API_BASE}/api/upload?folder=articles/covers`, {
+                    method: 'POST',
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                    body: formData,
+                });
+                
+                if (!res.ok) {
+                    throw new Error('Upload thất bại');
+                }
+                
+                const result = await res.json();
+                if (result.success && result.data?.url) {
+                    const cloudinaryUrl = result.data.url;
+                    setPreviewImage(cloudinaryUrl);
+                    form.setFieldValue('imageUrl', cloudinaryUrl);
+                    message.success('Ảnh đã được tải lên Cloudinary!');
+                } else {
+                    throw new Error(result.message || 'Upload thất bại');
+                }
+                
+                setImageLoading(false);
             } catch (error: any) {
                 message.error('Lỗi khi tải ảnh lên: ' + error.message);
                 setImageLoading(false);
