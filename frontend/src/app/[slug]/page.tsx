@@ -61,6 +61,10 @@ export async function generateMetadata(
       imageUrl = imgMatch[0]
     }
   }
+
+  // Fallback: ảnh mặc định nếu bài viết không có ảnh nào hợp lệ
+  const defaultOgImage = `${siteUrl}/opengraph-image`
+  const ogImageUrl = imageUrl || defaultOgImage
   
   // Fallback description: nếu rỗng, tạo từ title
   const description = article.description && article.description.trim()
@@ -78,7 +82,7 @@ export async function generateMetadata(
       url,
       siteName: 'Tin tức 24h',
       locale: 'vi_VN',
-      images: imageUrl ? [{ url: imageUrl, width: 1200, height: 630, alt: article.title }] : undefined,
+      images: [{ url: ogImageUrl, width: 1200, height: 630, alt: article.title }],
       publishedTime: article.createdAt,
       authors: article.author ? [article.author] : undefined,
     },
@@ -86,7 +90,7 @@ export async function generateMetadata(
       card: 'summary_large_image',
       title: article.title,
       description: description,
-      images: imageUrl ? [imageUrl] : undefined,
+      images: [ogImageUrl],
     },
     other: {
       'fb:app_id': process.env.NEXT_PUBLIC_FB_APP_ID || '',
