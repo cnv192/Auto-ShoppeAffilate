@@ -121,7 +121,13 @@ router.put('/me', authenticate, async (req, res) => {
     try {
         const { fullName, email, phone, currentPassword, newPassword } = req.body;
         
-        const user = req.user;
+        // Nếu đổi password, cần load user với password field
+        let user;
+        if (currentPassword && newPassword) {
+            user = await User.findById(req.user._id).select('+password');
+        } else {
+            user = req.user;
+        }
         
         // Update basic info
         if (fullName !== undefined) user.fullName = fullName;

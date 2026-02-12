@@ -116,7 +116,8 @@ router.put('/change-password', authenticate, async (req, res) => {
             });
         }
 
-        const user = await User.findById(req.user._id);
+        // Cần select('+password') vì password có select: false trong schema
+        const user = await User.findById(req.user._id).select('+password');
         if (!user) {
             return res.status(404).json({
                 success: false,
