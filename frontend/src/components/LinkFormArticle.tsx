@@ -171,7 +171,7 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
         } else {
             setIsEditorMounted(false);
         }
-    }, [visible, editingLink, form]);
+    }, [visible, editingLink, form, categories]);
 
     const handleTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const title = e.target.value;

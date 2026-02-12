@@ -49,9 +49,9 @@ export async function generateMetadata(
   const url = `${siteUrl}/${params.slug}`
   
   // Lấy image URL - bỏ qua base64 data URLs vì Facebook không crawl được
-  let imageUrl = article.imageUrl || article.thumbnail
+  let imageUrl: string | undefined = article.imageUrl || article.thumbnail
   if (imageUrl && imageUrl.startsWith('data:')) {
-    imageUrl = null
+    imageUrl = undefined
   }
   
   // Nếu không có imageUrl hợp lệ, thử trích xuất ảnh đầu tiên từ content bài viết
