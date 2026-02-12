@@ -96,6 +96,35 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
       /<img[^>]*src=["']data:image[^"']*["'][^>]*>/gi,
       ''
     )
+
+    // Xử lý video iframe - thêm autoplay, muted và responsive wrapper
+    processedContent = processedContent.replace(
+      /<iframe([^>]*)(src=["'](https?:\/\/(?:www\.)?(?:youtube\.com|youtu\.be|youtube-nocookie\.com)\/[^"']*)["'])([^>]*)>/gi,
+      (_match, before, _srcAttr, srcUrl, after) => {
+        // Thêm autoplay=1 và mute=1 vào URL YouTube nếu chưa có
+        let newSrc = srcUrl
+        if (!newSrc.includes('autoplay=')) {
+          newSrc += (newSrc.includes('?') ? '&' : '?') + 'autoplay=1'
+        }
+        if (!newSrc.includes('mute=')) {
+          newSrc += '&mute=1'
+        }
+        
+        // Thêm allow="autoplay" attribute nếu chưa có
+        let attrs = before + after
+        if (!attrs.includes('allow=')) {
+          attrs = before + ` allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"` + after
+        }
+        
+        return `<div class="video-responsive"><iframe${attrs} src="${newSrc}">`
+      }
+    )
+    
+    // Đóng wrapper div sau </iframe>
+    processedContent = processedContent.replace(
+      /(<div class="video-responsive"><iframe[^>]*>.*?<\/iframe>)/gi,
+      '$1</div>'
+    )
     
     return processedContent
   }

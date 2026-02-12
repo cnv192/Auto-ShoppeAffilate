@@ -126,102 +126,113 @@ export default function HomeBannerDisplay() {
     return (
         <div
             style={{
-                width: `${widthPercent}%`,
-                maxWidth: '100%',
-                margin: '0 auto 24px auto',
-                borderRadius: 12,
-                overflow: 'hidden',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
-                position: 'relative',
+                position: 'fixed',
+                bottom: 0,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: `${widthPercent}vw`,
+                maxWidth: '100vw',
+                zIndex: 9999,
+                boxShadow: '0 -4px 20px rgba(0,0,0,0.15)',
                 opacity: fadeIn ? 1 : 0,
                 transition: 'opacity 0.3s ease-in-out',
+                animation: 'homeBannerSlideUp 0.4s ease-out',
             }}
         >
-            {/* Dismiss button */}
-            {currentBanner.dismissible !== false && (
-                <button
-                    onClick={handleDismiss}
-                    style={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        background: 'rgba(0,0,0,0.5)',
-                        border: 'none',
-                        color: '#fff',
-                        fontSize: 16,
-                        cursor: 'pointer',
-                        width: 28,
-                        height: 28,
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10,
-                        transition: 'background 0.2s',
-                        lineHeight: 1
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.8)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.5)')}
-                    aria-label="Đóng banner"
-                >
-                    ✕
-                </button>
-            )}
+            <div style={{ position: 'relative' }}>
+                {/* Dismiss button */}
+                {currentBanner.dismissible !== false && (
+                    <button
+                        onClick={handleDismiss}
+                        style={{
+                            position: 'absolute',
+                            top: 6,
+                            right: 6,
+                            background: 'rgba(0,0,0,0.5)',
+                            border: 'none',
+                            color: '#fff',
+                            fontSize: 18,
+                            cursor: 'pointer',
+                            width: 32,
+                            height: 32,
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 10,
+                            transition: 'background 0.2s',
+                            lineHeight: 1
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.8)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.5)')}
+                        aria-label="Đóng banner"
+                    >
+                        ✕
+                    </button>
+                )}
 
-            {/* Banner dots indicator */}
-            {banners.length > 1 && (
-                <div style={{
-                    position: 'absolute',
-                    bottom: 8,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    display: 'flex',
-                    gap: 6,
-                    zIndex: 10
-                }}>
-                    {banners.map((_, idx) => (
-                        <span
-                            key={idx}
+                {/* Banner dots indicator */}
+                {banners.length > 1 && (
+                    <div style={{
+                        position: 'absolute',
+                        bottom: 8,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        display: 'flex',
+                        gap: 6,
+                        zIndex: 10
+                    }}>
+                        {banners.map((_, idx) => (
+                            <span
+                                key={idx}
+                                style={{
+                                    width: idx === bannerIndex.current ? 20 : 8,
+                                    height: 8,
+                                    borderRadius: 4,
+                                    background: idx === bannerIndex.current ? '#D31016' : 'rgba(255,255,255,0.6)',
+                                    transition: 'all 0.3s ease',
+                                    cursor: 'pointer'
+                                }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setFadeIn(false);
+                                    setTimeout(() => {
+                                        bannerIndex.current = idx;
+                                        setCurrentBanner(banners[idx]);
+                                        setFadeIn(true);
+                                    }, 200);
+                                }}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                {/* Banner image */}
+                <div onClick={handleClick} style={{ cursor: 'pointer' }}>
+                    <picture>
+                        {currentBanner.mobileImageUrl && (
+                            <source media="(max-width: 768px)" srcSet={currentBanner.mobileImageUrl} />
+                        )}
+                        <img
+                            src={currentBanner.imageUrl}
+                            alt={currentBanner.altText || currentBanner.name}
                             style={{
-                                width: idx === bannerIndex.current ? 20 : 8,
-                                height: 8,
-                                borderRadius: 4,
-                                background: idx === bannerIndex.current ? '#D31016' : 'rgba(255,255,255,0.6)',
-                                transition: 'all 0.3s ease',
-                                cursor: 'pointer'
-                            }}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setFadeIn(false);
-                                setTimeout(() => {
-                                    bannerIndex.current = idx;
-                                    setCurrentBanner(banners[idx]);
-                                    setFadeIn(true);
-                                }, 200);
+                                width: '100%',
+                                height: 'auto',
+                                display: 'block',
+                                objectFit: 'contain'
                             }}
                         />
-                    ))}
+                    </picture>
                 </div>
-            )}
-
-            {/* Banner image */}
-            <div onClick={handleClick} style={{ cursor: 'pointer' }}>
-                <picture>
-                    {currentBanner.mobileImageUrl && (
-                        <source media="(max-width: 768px)" srcSet={currentBanner.mobileImageUrl} />
-                    )}
-                    <img
-                        src={currentBanner.imageUrl}
-                        alt={currentBanner.altText || currentBanner.name}
-                        style={{
-                            width: '100%',
-                            height: 'auto',
-                            display: 'block',
-                            objectFit: 'contain'
-                        }}
-                    />
-                </picture>
             </div>
+
+            <style jsx>{`
+                @keyframes homeBannerSlideUp {
+                    from { transform: translateX(-50%) translateY(100%); }
+                    to { transform: translateX(-50%) translateY(0); }
+                }
+            `}</style>
         </div>
     );
 }

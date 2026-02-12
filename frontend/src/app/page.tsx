@@ -5,6 +5,7 @@ import { ArticleCard } from '@/components/ArticleCard'
 import { ArticleFeatured } from '@/components/ArticleFeatured'
 import { ArticleListItem } from '@/components/ArticleListItem'
 import HomeBannerDisplay from '@/components/HomeBannerDisplay'
+import BannerDisplay from '@/components/BannerDisplay'
 import { fetchFromApi } from '@/lib/utils'
 import { Link, PaginatedResponse } from '@/lib/types'
 import { fetchOptions } from '@/config/api'
@@ -74,11 +75,6 @@ export default async function HomePage() {
                 </div>
               </section>
 
-              {/* Banner Display - Random all banners */}
-              <section className="mb-8">
-                <HomeBannerDisplay />
-              </section>
-
               {/* Main Grid + Sidebar */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Content */}
@@ -128,6 +124,18 @@ export default async function HomePage() {
       </main>
 
       <Footer />
+
+      {/* Floating Banners - hiển thị nổi trên tất cả trang */}
+      <HomeBannerDisplay />
+
+      {/* Header Banner */}
+      <BannerDisplay type="header" />
+
+      {/* Center Popup Banner */}
+      <BannerDisplay type="center_popup" />
+
+      {/* Sidebar Banner */}
+      <BannerDisplay type="sidebar" />
     </div>
   )
 }

@@ -247,6 +247,41 @@
   margin: 1em auto;
 }
 
+/* Responsive video wrapper for article pages */
+.video-responsive {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 aspect ratio */
+  height: 0;
+  overflow: hidden;
+  margin: 1.5em 0;
+  border-radius: 8px;
+}
+
+.video-responsive iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 8px;
+}
+
+/* Prose iframe styles */
+.prose iframe {
+  max-width: 100%;
+  margin: 1.5em auto;
+  display: block;
+  border-radius: 8px;
+}
+
+.prose .ql-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
