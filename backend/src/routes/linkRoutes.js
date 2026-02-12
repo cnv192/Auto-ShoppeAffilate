@@ -295,7 +295,8 @@ router.put('/:slug', async (req, res) => {
             content,
             category,
             author,
-            publishedAt
+            publishedAt,
+            customSlug
         } = req.body;
         
         // Validate URL if provided
@@ -310,9 +311,21 @@ router.put('/:slug', async (req, res) => {
             }
         }
         
+        // If customSlug is provided and different from current, check for duplicates
+        if (customSlug && customSlug.toLowerCase() !== slug.toLowerCase()) {
+            const existingLink = await Link.findOne({ slug: customSlug.toLowerCase() });
+            if (existingLink) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Slug "${customSlug}" đã được sử dụng bởi bài viết khác`
+                });
+            }
+        }
+        
         // Build update object - only include fields that are provided (not undefined)
         const updateData = {};
         if (title !== undefined) updateData.title = title;
+        if (customSlug !== undefined) updateData.slug = customSlug.toLowerCase();
         if (targetUrl !== undefined) updateData.targetUrl = targetUrl;
         if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
         if (isActive !== undefined) updateData.isActive = isActive;

@@ -216,6 +216,13 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
             const values = await form.validateFields();
             values.content = editorContent;
             
+            // Always get customSlug directly from form - validateFields may return stale value
+            // when the field was set programmatically via form.setFieldValue in handleTitleChange
+            const currentSlug = form.getFieldValue('customSlug');
+            if (currentSlug !== undefined) {
+                values.customSlug = currentSlug;
+            }
+            
             if (values.imageLinkUrl && !values.imageUrl) {
                 values.imageUrl = values.imageLinkUrl;
             }

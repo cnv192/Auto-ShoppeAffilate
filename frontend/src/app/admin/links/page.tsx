@@ -73,7 +73,9 @@ export default function LinksPage() {
             // Map customSlug to slug for backend, ensure all fields are included
             const linkData = {
                 ...values,
-                customSlug: values.customSlug || values.slug, // Backend expects customSlug
+                customSlug: values.customSlug != null && values.customSlug !== '' 
+                    ? values.customSlug 
+                    : (editingLink ? editingLink.slug : undefined), // Backend expects customSlug
                 description: values.description || '',
                 content: values.content || '',
                 category: values.category || 'Khuyến mãi',
