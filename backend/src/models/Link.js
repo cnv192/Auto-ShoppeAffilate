@@ -368,7 +368,13 @@ LinkSchema.statics.createWithAutoSlug = async function(linkData) {
     if (linkData.slug) {
         const existing = await this.findOne({ slug: linkData.slug.toLowerCase() });
         if (existing) {
-            throw new Error('Slug đã tồn tại');
+            // Nếu link cũ đã bị soft-delete (isActive=false), xóa hẳn để nhường slug
+            if (!existing.isActive) {
+                await this.findByIdAndDelete(existing._id);
+                console.log(`🔄 [Link] Xóa link inactive cũ để tái sử dụng slug: ${linkData.slug}`);
+            } else {
+                throw new Error('Slug đã tồn tại');
+            }
         }
     } else {
         // Tạo slug tự động và đảm bảo unique

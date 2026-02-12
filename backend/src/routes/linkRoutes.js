@@ -337,15 +337,39 @@ router.put('/:slug', async (req, res) => {
         if (customSlug && customSlug.toLowerCase() !== slug.toLowerCase()) {
             const existingLink = await Link.findOne({ slug: customSlug.toLowerCase() });
             if (existingLink) {
-                return res.status(400).json({
-                    success: false,
-                    error: `Slug "${customSlug}" đã được sử dụng bởi bài viết khác`
-                });
+                if (!existingLink.isActive) {
+                    // Bài cũ đã bị soft-delete, xóa hẳn để nhường slug
+                    await Link.findByIdAndDelete(existingLink._id);
+                    console.log(`🔄 Xóa link inactive cũ để tái sử dụng slug: ${customSlug}`);
+                } else {
+                    return res.status(400).json({
+                        success: false,
+                        error: `Slug "${customSlug}" đã được sử dụng bởi bài viết khác`
+                    });
+                }
             }
         }
         
         // Convert base64 imageUrl to Cloudinary URL if needed
         const resolvedImageUrl = imageUrl !== undefined ? await resolveImageUrl(imageUrl) : undefined;
+
+        // Xóa ảnh cũ trên Cloudinary nếu đang thay bằng ảnh mới
+        if (resolvedImageUrl !== undefined) {
+            try {
+                const currentLink = await Link.findOne({ slug: slug.toLowerCase() });
+                if (currentLink && currentLink.imageUrl && currentLink.imageUrl.includes('cloudinary.com') 
+                    && currentLink.imageUrl !== resolvedImageUrl) {
+                    const oldMatch = currentLink.imageUrl.match(/\/upload\/(?:v\d+\/)?(.*?)(?:\.\w+)?$/);
+                    if (oldMatch && oldMatch[1]) {
+                        await UploadService.deleteFile(oldMatch[1]).catch(err => {
+                            console.warn(`⚠️  Không xóa được ảnh cũ: ${err.message}`);
+                        });
+                    }
+                }
+            } catch (cleanErr) {
+                console.warn(`⚠️  Lỗi cleanup ảnh cũ: ${cleanErr.message}`);
+            }
+        }
 
         // Build update object - only include fields that are provided (not undefined)
         const updateData = {};

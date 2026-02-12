@@ -7,6 +7,56 @@
 
 const Link = require('../models/Link');
 const { analyzeIP } = require('../middleware/ipFilter');
+const UploadService = require('./uploadService');
+
+/**
+ * Trích publicId từ Cloudinary URL
+ * VD: https://res.cloudinary.com/xxx/image/upload/v123/shoppe/articles/covers/abc.jpg
+ *   → shoppe/articles/covers/abc
+ */
+const extractCloudinaryPublicId = (url) => {
+    if (!url || !url.includes('cloudinary.com')) return null;
+    try {
+        const match = url.match(/\/upload\/(?:v\d+\/)?(.*?)(?:\.\w+)?$/);
+        return match ? match[1] : null;
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * Xóa tất cả ảnh Cloudinary liên quan đến 1 link/article
+ */
+const cleanupCloudinaryImages = async (link) => {
+    const publicIds = [];
+    
+    // 1. Cover image
+    if (link.imageUrl && link.imageUrl.includes('cloudinary.com')) {
+        const pid = extractCloudinaryPublicId(link.imageUrl);
+        if (pid) publicIds.push(pid);
+    }
+    
+    // 2. Inline images trong content HTML
+    if (link.content) {
+        const regex = /https?:\/\/res\.cloudinary\.com\/[^"'\s)]+/g;
+        const matches = link.content.match(regex) || [];
+        for (const imgUrl of matches) {
+            const pid = extractCloudinaryPublicId(imgUrl);
+            if (pid && !publicIds.includes(pid)) publicIds.push(pid);
+        }
+    }
+    
+    // Xóa song song
+    if (publicIds.length > 0) {
+        console.log(`🗑️  [Cloudinary] Đang xóa ${publicIds.length} ảnh...`);
+        const results = await Promise.allSettled(
+            publicIds.map(pid => UploadService.deleteFile(pid).catch(err => {
+                console.warn(`⚠️  [Cloudinary] Không xóa được ${pid}: ${err.message}`);
+            }))
+        );
+        console.log(`✅ [Cloudinary] Đã xử lý xóa ${results.length} ảnh`);
+    }
+};
 
 /**
  * Tạo link mới
@@ -111,22 +161,31 @@ const updateLink = async (slug, updateData) => {
 };
 
 /**
- * Xóa link (soft delete)
+ * Xóa link (hard delete) + xóa ảnh trên Cloudinary
  * @param {string} slug - Slug của link
  * @returns {boolean} - Kết quả xóa
  */
 const deleteLink = async (slug) => {
     try {
-        const result = await Link.findOneAndUpdate(
-            { slug: slug.toLowerCase() },
-            { $set: { isActive: false } }
-        );
+        // Tìm link trước để lấy thông tin ảnh
+        const link = await Link.findOne({ slug: slug.toLowerCase() });
         
-        if (result) {
-            console.log(`✅ [LinkService] Xóa link: /${slug}`);
-            return true;
+        if (!link) {
+            return false;
         }
-        return false;
+        
+        // Xóa ảnh trên Cloudinary (không chặn nếu lỗi)
+        try {
+            await cleanupCloudinaryImages(link);
+        } catch (cleanupError) {
+            console.warn(`⚠️  [LinkService] Lỗi xóa ảnh Cloudinary: ${cleanupError.message}`);
+        }
+        
+        // Hard delete khỏi DB
+        await Link.findByIdAndDelete(link._id);
+        
+        console.log(`✅ [LinkService] Đã xóa hoàn toàn link: /${slug}`);
+        return true;
     } catch (error) {
         console.error('❌ [LinkService] Lỗi xóa:', error.message);
         throw error;
