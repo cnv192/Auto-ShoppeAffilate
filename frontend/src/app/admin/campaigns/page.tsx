@@ -340,7 +340,7 @@ export default function CampaignsPage() {
         } finally {
             setSaving(false);
         }
-    }, [form, editingCampaign]);
+    }, [form, editingCampaign, commentSets, groupSets, pageSets]);
 
     // Hiển thị skeleton khi loading lần đầu (không có cached data)
     if (isLoading && campaigns.length === 0) {
