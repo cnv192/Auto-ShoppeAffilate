@@ -567,15 +567,15 @@ campaignSchema.methods.getRandomCommentTemplate = function() {
  * NOTE: Uses FRONTEND_URL for public links
  */
 campaignSchema.methods.generateComment = function(baseUrl = null) {
-    // Use FRONTEND_URL for all public links
-    const siteUrl = baseUrl || process.env.FRONTEND_URL || 'http://localhost:3000';
+    // Priority: SITE_URL (public domain) > FRONTEND_URL (Vercel) > fallback
+    const siteUrl = baseUrl || process.env.SITE_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
     
     const template = this.getRandomCommentTemplate();
     const slug = this.getRandomSlug();
     
-    // Ensure proper URL format
-    const urlPath = siteUrl.endsWith('/go') ? siteUrl : `${siteUrl}/go`;
-    const fullUrl = `${urlPath}/${slug}`;
+    // Direct slug URL (no /go/ prefix) - matches frontend [slug] route
+    const cleanBase = siteUrl.replace(/\/+$/, ''); // Remove trailing slash
+    const fullUrl = `${cleanBase}/${slug}`;
     
     // Replace placeholder {link} trong template
     const text = template.replace(/\{link\}/g, fullUrl);
