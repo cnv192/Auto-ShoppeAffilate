@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Table,
     Button,
@@ -15,7 +15,15 @@ import {
     Statistic,
     Badge,
     Alert,
-    Empty
+    Empty,
+    Modal,
+    Form,
+    Input,
+    Select,
+    InputNumber,
+    TimePicker,
+    Divider,
+    Slider
 } from 'antd';
 import {
     PlayCircleOutlined,
@@ -27,7 +35,8 @@ import {
     RocketOutlined,
     CheckCircleOutlined,
     ClockCircleOutlined,
-    SyncOutlined
+    SyncOutlined,
+    EditOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -108,8 +117,61 @@ const campaignApi = {
             throw new Error(responseData.message || 'Failed to execute campaign');
         }
         return responseData;
+    },
+    create: async (data: any) => {
+        const token = getToken();
+        const res = await fetch(getApiUrl('campaigns'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(data)
+        });
+        const responseData = await res.json();
+        if (!res.ok) {
+            throw new Error(responseData.message || 'Failed to create campaign');
+        }
+        return responseData;
+    },
+    update: async (id: string, data: any) => {
+        const token = getToken();
+        const res = await fetch(getApiUrl(`campaigns/${id}`), {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(data)
+        });
+        const responseData = await res.json();
+        if (!res.ok) {
+            throw new Error(responseData.message || 'Failed to update campaign');
+        }
+        return responseData;
     }
 };
+
+const fbApi = {
+    getAll: async () => {
+        const token = getToken();
+        const res = await fetch(getApiUrl('facebook-accounts'), {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Failed to fetch facebook accounts');
+        return res.json();
+    }
+};
+
+interface FacebookAccount {
+    _id: string;
+    name?: string;
+    accountName?: string;
+    email?: string;
+    tokenStatus: string;
+    isActive: boolean;
+    [key: string]: any;
+}
 
 interface Campaign {
     _id: string;
@@ -122,6 +184,14 @@ interface Campaign {
     durationHours?: number;
     filters?: any;
     stats?: any;
+    facebookAccountId?: any;
+    delayMin?: number;
+    delayMax?: number;
+    maxCommentsPerPost?: number;
+    linkGroups?: string[];
+    fanpages?: string[];
+    targetPostIds?: string[];
+    description?: string;
     [key: string]: any;
 }
 
@@ -131,6 +201,101 @@ export default function CampaignsPage() {
     
     // Local state chỉ cho action loading
     const [actionLoading, setActionLoading] = useState<{ [key: string]: boolean }>({});
+
+    // Modal state
+    const [modalVisible, setModalVisible] = useState(false);
+    const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [fbAccounts, setFbAccounts] = useState<FacebookAccount[]>([]);
+    const [form] = Form.useForm();
+
+    // Fetch Facebook accounts khi mở modal
+    const fetchFbAccounts = useCallback(async () => {
+        try {
+            const response = await fbApi.getAll();
+            const accounts = response.data || response.accounts || response;
+            setFbAccounts(Array.isArray(accounts) ? accounts : []);
+        } catch (error) {
+            console.error('Failed to fetch FB accounts:', error);
+        }
+    }, []);
+
+    const openCreateModal = useCallback(() => {
+        setEditingCampaign(null);
+        form.resetFields();
+        form.setFieldsValue({
+            startTime: dayjs('08:00', 'HH:mm'),
+            durationHours: 5,
+            maxCommentsPerPost: 1,
+            delayMin: 30,
+            delayMax: 60,
+        });
+        fetchFbAccounts();
+        setModalVisible(true);
+    }, [form, fetchFbAccounts]);
+
+    const openEditModal = useCallback((campaign: Campaign) => {
+        setEditingCampaign(campaign);
+        form.resetFields();
+        form.setFieldsValue({
+            name: campaign.name,
+            description: campaign.description,
+            facebookAccountId: campaign.facebookAccountId?._id || campaign.facebookAccountId,
+            slugs: campaign.slugs?.join('\n'),
+            commentTemplates: campaign.commentTemplates?.join('\n'),
+            startTime: campaign.startTime ? dayjs(campaign.startTime, 'HH:mm') : dayjs('08:00', 'HH:mm'),
+            durationHours: campaign.durationHours || 5,
+            maxCommentsPerPost: campaign.maxCommentsPerPost || 1,
+            delayMin: campaign.delayMin || 30,
+            delayMax: campaign.delayMax || 60,
+            targetPostIds: campaign.targetPostIds?.join('\n'),
+            linkGroups: campaign.linkGroups?.join('\n'),
+            fanpages: campaign.fanpages?.join('\n'),
+        });
+        fetchFbAccounts();
+        setModalVisible(true);
+    }, [form, fetchFbAccounts]);
+
+    const handleModalSubmit = useCallback(async () => {
+        try {
+            const values = await form.validateFields();
+            setSaving(true);
+
+            const payload = {
+                name: values.name,
+                description: values.description,
+                facebookAccountId: values.facebookAccountId,
+                slugs: values.slugs, // backend parseListInput sẽ xử lý
+                commentTemplates: values.commentTemplates,
+                startTime: values.startTime ? dayjs(values.startTime).format('HH:mm') : '08:00',
+                durationHours: values.durationHours,
+                maxCommentsPerPost: values.maxCommentsPerPost,
+                delayMin: values.delayMin,
+                delayMax: values.delayMax,
+                targetPostIds: values.targetPostIds || '',
+                linkGroups: values.linkGroups || '',
+                fanpages: values.fanpages || '',
+            };
+
+            if (editingCampaign) {
+                await campaignApi.update(editingCampaign._id, payload);
+                message.success('Cập nhật chiến dịch thành công!');
+            } else {
+                await campaignApi.create(payload);
+                message.success('Tạo chiến dịch thành công!');
+            }
+
+            setModalVisible(false);
+            form.resetFields();
+            setEditingCampaign(null);
+            invalidateCampaigns();
+        } catch (error: any) {
+            if (error.errorFields) return; // validation error
+            message.error(error.message || 'Có lỗi xảy ra');
+        } finally {
+            setSaving(false);
+        }
+    }, [form, editingCampaign]);
 
     // Hiển thị skeleton khi loading lần đầu (không có cached data)
     if (isLoading && campaigns.length === 0) {
@@ -304,6 +469,13 @@ export default function CampaignsPage() {
                 <Space size="small" wrap>
                     {record.status !== 'active' && record.status !== 'completed' && (
                         <Button
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => openEditModal(record)}
+                        />
+                    )}
+                    {record.status !== 'active' && record.status !== 'completed' && (
+                        <Button
                             type="primary"
                             size="small"
                             icon={<RocketOutlined />}
@@ -415,6 +587,7 @@ export default function CampaignsPage() {
                     <Button
                         type="primary"
                         icon={<PlusOutlined />}
+                        onClick={openCreateModal}
                         style={{ height: 40, borderRadius: 8, fontWeight: 500 }}
                     >
                         Tạo Chiến dịch
@@ -504,12 +677,144 @@ export default function CampaignsPage() {
                         <Button
                             type="primary"
                             icon={<PlusOutlined />}
+                            onClick={openCreateModal}
                         >
                             Tạo Chiến dịch Đầu Tiên
                         </Button>
                     </Empty>
                 )}
             </Card>
+
+            {/* Modal tạo/sửa chiến dịch */}
+            <Modal
+                title={
+                    <Space>
+                        {editingCampaign ? <EditOutlined style={{ color: '#D31016' }} /> : <PlusOutlined style={{ color: '#D31016' }} />}
+                        <span>{editingCampaign ? 'Chỉnh sửa Chiến dịch' : 'Tạo Chiến dịch Mới'}</span>
+                    </Space>
+                }
+                open={modalVisible}
+                onCancel={() => { setModalVisible(false); setEditingCampaign(null); form.resetFields(); }}
+                onOk={handleModalSubmit}
+                okText={editingCampaign ? 'Cập nhật' : 'Tạo chiến dịch'}
+                cancelText="Hủy"
+                confirmLoading={saving}
+                width={720}
+                destroyOnClose
+            >
+                <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
+                    <Form.Item
+                        name="name"
+                        label="Tên chiến dịch"
+                        rules={[{ required: true, message: 'Nhập tên chiến dịch' }]}
+                    >
+                        <Input placeholder="VD: Chiến dịch quảng bá sản phẩm A" maxLength={100} />
+                    </Form.Item>
+
+                    <Form.Item name="description" label="Mô tả">
+                        <Input.TextArea placeholder="Mô tả ngắn về chiến dịch (tùy chọn)" rows={2} maxLength={500} />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="facebookAccountId"
+                        label="Tài khoản Facebook"
+                        rules={[{ required: true, message: 'Chọn tài khoản Facebook' }]}
+                    >
+                        <Select placeholder="Chọn tài khoản Facebook">
+                            {fbAccounts.filter(a => a.isActive).map(acc => (
+                                <Select.Option key={acc._id} value={acc._id}>
+                                    {acc.name || acc.accountName || acc.email || acc._id}
+                                </Select.Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+
+                    <Divider>Nội dung</Divider>
+
+                    <Form.Item
+                        name="slugs"
+                        label="Danh sách Slugs (mỗi dòng 1 slug)"
+                        rules={[{ required: true, message: 'Nhập ít nhất 1 slug' }]}
+                    >
+                        <Input.TextArea
+                            placeholder={`VD:\nsan-pham-a\nsan-pham-b\nsan-pham-c`}
+                            rows={4}
+                            style={{ fontFamily: 'monospace' }}
+                        />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="commentTemplates"
+                        label="Mẫu Comment (mỗi dòng 1 mẫu, dùng {link} để chèn link)"
+                        rules={[{ required: true, message: 'Nhập ít nhất 1 mẫu comment' }]}
+                    >
+                        <Input.TextArea
+                            placeholder={`VD:\nSản phẩm tốt quá! Xem thêm tại {link}\nMình đã dùng rồi, rất hài lòng {link}\nAi cần thì inbox mình nhé {link}`}
+                            rows={5}
+                            style={{ fontFamily: 'monospace' }}
+                        />
+                    </Form.Item>
+
+                    <Form.Item name="targetPostIds" label="Target Post IDs/URLs (tùy chọn, mỗi dòng 1 ID)">
+                        <Input.TextArea
+                            placeholder={`VD:\nhttps://facebook.com/groups/123/posts/456\n789012345`}
+                            rows={3}
+                            style={{ fontFamily: 'monospace' }}
+                        />
+                    </Form.Item>
+
+                    <Divider>Lịch chạy</Divider>
+
+                    <Row gutter={16}>
+                        <Col span={12}>
+                            <Form.Item
+                                name="startTime"
+                                label="Giờ bắt đầu"
+                                rules={[{ required: true, message: 'Chọn giờ bắt đầu' }]}
+                            >
+                                <TimePicker format="HH:mm" style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                            <Form.Item
+                                name="durationHours"
+                                label="Thời lượng (giờ)"
+                                rules={[{ required: true, message: 'Nhập thời lượng' }]}
+                            >
+                                <InputNumber min={0.5} max={24} step={0.5} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Divider>Cài đặt nâng cao</Divider>
+
+                    <Row gutter={16}>
+                        <Col span={8}>
+                            <Form.Item name="maxCommentsPerPost" label="Max comment/bài">
+                                <InputNumber min={1} max={10} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                            <Form.Item name="delayMin" label="Delay tối thiểu (giây)">
+                                <InputNumber min={10} max={300} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                            <Form.Item name="delayMax" label="Delay tối đa (giây)">
+                                <InputNumber min={10} max={600} style={{ width: '100%' }} />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    <Form.Item name="linkGroups" label="Facebook Groups (tùy chọn, mỗi dòng 1 URL)">
+                        <Input.TextArea placeholder="URL các group Facebook" rows={3} style={{ fontFamily: 'monospace' }} />
+                    </Form.Item>
+
+                    <Form.Item name="fanpages" label="Fanpages (tùy chọn, mỗi dòng 1 URL)">
+                        <Input.TextArea placeholder="URL các fanpage Facebook" rows={3} style={{ fontFamily: 'monospace' }} />
+                    </Form.Item>
+                </Form>
+            </Modal>
         </>
     );
 }
