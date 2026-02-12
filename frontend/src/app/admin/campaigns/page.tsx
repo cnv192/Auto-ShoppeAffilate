@@ -22,8 +22,7 @@ import {
     Select,
     InputNumber,
     TimePicker,
-    Divider,
-    Slider
+    Divider
 } from 'antd';
 import {
     PlayCircleOutlined,
