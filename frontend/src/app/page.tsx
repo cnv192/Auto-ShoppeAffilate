@@ -4,7 +4,6 @@ import { Footer } from '@/components/Footer'
 import { ArticleCard } from '@/components/ArticleCard'
 import { ArticleFeatured } from '@/components/ArticleFeatured'
 import { ArticleListItem } from '@/components/ArticleListItem'
-import HomeBannerDisplay from '@/components/HomeBannerDisplay'
 import BannerDisplay from '@/components/BannerDisplay'
 import { fetchFromApi } from '@/lib/utils'
 import { Link, PaginatedResponse } from '@/lib/types'
@@ -125,16 +124,7 @@ export default async function HomePage() {
 
       <Footer />
 
-      {/* Floating Banners - hiển thị nổi trên tất cả trang */}
-      <HomeBannerDisplay />
-
-      {/* Header Banner */}
-      <BannerDisplay type="header" />
-
-      {/* Center Popup Banner */}
-      <BannerDisplay type="center_popup" />
-
-      {/* Sidebar Banner */}
+      {/* Sidebar Banner - hiển thị nổi bên phải */}
       <BannerDisplay type="sidebar" />
     </div>
   )
