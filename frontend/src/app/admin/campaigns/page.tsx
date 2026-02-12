@@ -43,7 +43,7 @@ import 'dayjs/locale/vi';
 import { getApiUrl } from '@/lib/adminApi';
 import { getToken, getCurrentUser } from '@/lib/authService';
 import { ListPageSkeleton } from '@/components/PageSkeleton';
-import { useCampaigns, invalidateCampaigns } from '@/hooks/useAdminData';
+import { useCampaigns, invalidateCampaigns, useLinks } from '@/hooks/useAdminData';
 
 dayjs.extend(relativeTime);
 dayjs.locale('vi');
@@ -162,6 +162,24 @@ const fbApi = {
     }
 };
 
+const resourceApi = {
+    getByType: async (type: string) => {
+        const token = getToken();
+        const res = await fetch(getApiUrl(`resource-sets/by-type/${type}`), {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error(`Failed to fetch ${type} resources`);
+        return res.json();
+    }
+};
+
+interface ResourceSet {
+    _id: string;
+    name: string;
+    content: string[];
+    type: string;
+}
+
 interface FacebookAccount {
     _id: string;
     name?: string;
@@ -201,21 +219,35 @@ export default function CampaignsPage() {
     // Local state chỉ cho action loading
     const [actionLoading, setActionLoading] = useState<{ [key: string]: boolean }>({});
 
+    // Links data for slug selection
+    const { links } = useLinks();
+
     // Modal state
     const [modalVisible, setModalVisible] = useState(false);
     const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
     const [saving, setSaving] = useState(false);
     const [fbAccounts, setFbAccounts] = useState<FacebookAccount[]>([]);
+    const [commentSets, setCommentSets] = useState<ResourceSet[]>([]);
+    const [groupSets, setGroupSets] = useState<ResourceSet[]>([]);
+    const [pageSets, setPageSets] = useState<ResourceSet[]>([]);
     const [form] = Form.useForm();
 
-    // Fetch Facebook accounts khi mở modal
-    const fetchFbAccounts = useCallback(async () => {
+    // Fetch Facebook accounts và resource sets khi mở modal
+    const fetchModalData = useCallback(async () => {
         try {
-            const response = await fbApi.getAll();
-            const accounts = response.data || response.accounts || response;
+            const [fbRes, commentRes, groupRes, pageRes] = await Promise.all([
+                fbApi.getAll(),
+                resourceApi.getByType('comment'),
+                resourceApi.getByType('group'),
+                resourceApi.getByType('page'),
+            ]);
+            const accounts = fbRes.data || fbRes.accounts || fbRes;
             setFbAccounts(Array.isArray(accounts) ? accounts : []);
+            setCommentSets(Array.isArray(commentRes.data) ? commentRes.data : []);
+            setGroupSets(Array.isArray(groupRes.data) ? groupRes.data : []);
+            setPageSets(Array.isArray(pageRes.data) ? pageRes.data : []);
         } catch (error) {
-            console.error('Failed to fetch FB accounts:', error);
+            console.error('Failed to fetch modal data:', error);
         }
     }, []);
 
@@ -229,9 +261,9 @@ export default function CampaignsPage() {
             delayMin: 30,
             delayMax: 60,
         });
-        fetchFbAccounts();
+        fetchModalData();
         setModalVisible(true);
-    }, [form, fetchFbAccounts]);
+    }, [form, fetchModalData]);
 
     const openEditModal = useCallback((campaign: Campaign) => {
         setEditingCampaign(campaign);
@@ -240,7 +272,8 @@ export default function CampaignsPage() {
             name: campaign.name,
             description: campaign.description,
             facebookAccountId: campaign.facebookAccountId?._id || campaign.facebookAccountId,
-            slugs: campaign.slugs?.join('\n'),
+            slugs: campaign.slugs || [],
+            commentSetId: undefined,
             commentTemplates: campaign.commentTemplates?.join('\n'),
             startTime: campaign.startTime ? dayjs(campaign.startTime, 'HH:mm') : dayjs('08:00', 'HH:mm'),
             durationHours: campaign.durationHours || 5,
@@ -248,12 +281,14 @@ export default function CampaignsPage() {
             delayMin: campaign.delayMin || 30,
             delayMax: campaign.delayMax || 60,
             targetPostIds: campaign.targetPostIds?.join('\n'),
+            groupSetId: undefined,
             linkGroups: campaign.linkGroups?.join('\n'),
+            pageSetId: undefined,
             fanpages: campaign.fanpages?.join('\n'),
         });
-        fetchFbAccounts();
+        fetchModalData();
         setModalVisible(true);
-    }, [form, fetchFbAccounts]);
+    }, [form, fetchModalData]);
 
     const handleModalSubmit = useCallback(async () => {
         try {
@@ -264,8 +299,8 @@ export default function CampaignsPage() {
                 name: values.name,
                 description: values.description,
                 facebookAccountId: values.facebookAccountId,
-                slugs: values.slugs, // backend parseListInput sẽ xử lý
-                commentTemplates: values.commentTemplates,
+                slugs: Array.isArray(values.slugs) ? values.slugs : [],
+                commentTemplates: values.commentTemplates, // backend parseListInput xử lý
                 startTime: values.startTime ? dayjs(values.startTime).format('HH:mm') : '08:00',
                 durationHours: values.durationHours,
                 maxCommentsPerPost: values.maxCommentsPerPost,
@@ -730,31 +765,66 @@ export default function CampaignsPage() {
 
                     <Divider>Nội dung</Divider>
 
+                    {/* Slugs - chọn từ danh sách bài viết đang có */}
                     <Form.Item
                         name="slugs"
-                        label="Danh sách Slugs (mỗi dòng 1 slug)"
-                        rules={[{ required: true, message: 'Nhập ít nhất 1 slug' }]}
+                        label="Chọn bài viết (slugs)"
+                        rules={[{ required: true, message: 'Chọn ít nhất 1 bài viết' }]}
                     >
-                        <Input.TextArea
-                            placeholder={`VD:\nsan-pham-a\nsan-pham-b\nsan-pham-c`}
-                            rows={4}
-                            style={{ fontFamily: 'monospace' }}
-                        />
+                        <Select
+                            mode="multiple"
+                            placeholder="Tìm và chọn bài viết..."
+                            showSearch
+                            optionFilterProp="label"
+                            style={{ width: '100%' }}
+                        >
+                            {links.map((link: any) => (
+                                <Select.Option key={link.slug} value={link.slug} label={`${link.title} (${link.slug})`}>
+                                    <div>
+                                        <div style={{ fontWeight: 500 }}>{link.title}</div>
+                                        <div style={{ fontSize: 12, color: '#999' }}>/{link.slug}</div>
+                                    </div>
+                                </Select.Option>
+                            ))}
+                        </Select>
                     </Form.Item>
 
+                    {/* Comment Templates - chọn từ bộ mẫu hoặc nhập tay */}
+                    <Form.Item label="Mẫu Comment">
+                        <Select
+                            placeholder="Chọn từ bộ mẫu comment đã lưu..."
+                            allowClear
+                            onChange={(setId: string) => {
+                                const set = commentSets.find(s => s._id === setId);
+                                if (set && set.content) {
+                                    form.setFieldsValue({ commentTemplates: set.content.join('\n') });
+                                }
+                            }}
+                            style={{ marginBottom: 8 }}
+                        >
+                            {commentSets.map(set => (
+                                <Select.Option key={set._id} value={set._id}>
+                                    {set.name} ({set.content?.length || 0} mẫu)
+                                </Select.Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
                     <Form.Item
                         name="commentTemplates"
-                        label="Mẫu Comment (mỗi dòng 1 mẫu, dùng {link} để chèn link)"
-                        rules={[{ required: true, message: 'Nhập ít nhất 1 mẫu comment' }]}
+                        rules={[{ required: true, message: 'Cần có ít nhất 1 mẫu comment' }]}
                     >
                         <Input.TextArea
-                            placeholder={`VD:\nSản phẩm tốt quá! Xem thêm tại {link}\nMình đã dùng rồi, rất hài lòng {link}\nAi cần thì inbox mình nhé {link}`}
+                            placeholder={`Mỗi dòng 1 mẫu, dùng {link} để chèn link, {name} để chèn tên:\nDeal hot! 🔥 {link}\nGiá tốt lắm: {link}`}
                             rows={5}
                             style={{ fontFamily: 'monospace' }}
                         />
                     </Form.Item>
 
-                    <Form.Item name="targetPostIds" label="Target Post IDs/URLs (tùy chọn, mỗi dòng 1 ID)">
+                    {/* Target Post IDs - nhập tay */}
+                    <Form.Item
+                        name="targetPostIds"
+                        label="Bài viết Facebook cụ thể (tùy chọn, mỗi dòng 1 link/ID)"
+                    >
                         <Input.TextArea
                             placeholder={`VD:\nhttps://facebook.com/groups/123/posts/456\n789012345`}
                             rows={3}
@@ -805,12 +875,52 @@ export default function CampaignsPage() {
                         </Col>
                     </Row>
 
-                    <Form.Item name="linkGroups" label="Facebook Groups (tùy chọn, mỗi dòng 1 URL)">
-                        <Input.TextArea placeholder="URL các group Facebook" rows={3} style={{ fontFamily: 'monospace' }} />
+                    {/* Groups - chọn từ bộ mẫu hoặc nhập tay */}
+                    <Form.Item label="Nguồn Group Facebook">
+                        <Select
+                            placeholder="Chọn từ bộ group đã lưu..."
+                            allowClear
+                            onChange={(setId: string) => {
+                                const set = groupSets.find(s => s._id === setId);
+                                if (set && set.content) {
+                                    form.setFieldsValue({ linkGroups: set.content.join('\n') });
+                                }
+                            }}
+                            style={{ marginBottom: 8 }}
+                        >
+                            {groupSets.map(set => (
+                                <Select.Option key={set._id} value={set._id}>
+                                    {set.name} ({set.content?.length || 0} groups)
+                                </Select.Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+                    <Form.Item name="linkGroups">
+                        <Input.TextArea placeholder="Mỗi dòng 1 URL group Facebook" rows={3} style={{ fontFamily: 'monospace' }} />
                     </Form.Item>
 
-                    <Form.Item name="fanpages" label="Fanpages (tùy chọn, mỗi dòng 1 URL)">
-                        <Input.TextArea placeholder="URL các fanpage Facebook" rows={3} style={{ fontFamily: 'monospace' }} />
+                    {/* Fanpages - chọn từ bộ mẫu hoặc nhập tay */}
+                    <Form.Item label="Nguồn Fanpage">
+                        <Select
+                            placeholder="Chọn từ bộ fanpage đã lưu..."
+                            allowClear
+                            onChange={(setId: string) => {
+                                const set = pageSets.find(s => s._id === setId);
+                                if (set && set.content) {
+                                    form.setFieldsValue({ fanpages: set.content.join('\n') });
+                                }
+                            }}
+                            style={{ marginBottom: 8 }}
+                        >
+                            {pageSets.map(set => (
+                                <Select.Option key={set._id} value={set._id}>
+                                    {set.name} ({set.content?.length || 0} pages)
+                                </Select.Option>
+                            ))}
+                        </Select>
+                    </Form.Item>
+                    <Form.Item name="fanpages">
+                        <Input.TextArea placeholder="Mỗi dòng 1 URL fanpage Facebook" rows={3} style={{ fontFamily: 'monospace' }} />
                     </Form.Item>
                 </Form>
             </Modal>
