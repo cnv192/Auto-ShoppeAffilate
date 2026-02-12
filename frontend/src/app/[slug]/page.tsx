@@ -45,28 +45,38 @@ export async function generateMetadata(
     }
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
-  const url = `${baseUrl}/${params.slug}`
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.tintuc24h.site'
+  const url = `${siteUrl}/${params.slug}`
   const imageUrl = article.imageUrl || article.thumbnail
+  
+  // Fallback description: nếu rỗng, tạo từ title
+  const description = article.description && article.description.trim()
+    ? article.description
+    : `${article.title} - Đọc tin tức mới nhất trên Tin tức 24h`
 
   return {
     title: article.title,
-    description: article.description,
+    description: description,
     keywords: article.tags?.join(', '),
     openGraph: {
       title: article.title,
-      description: article.description,
+      description: description,
       type: 'article',
       url,
-      images: imageUrl ? [{ url: imageUrl }] : undefined,
+      siteName: 'Tin tức 24h',
+      locale: 'vi_VN',
+      images: imageUrl ? [{ url: imageUrl, width: 1200, height: 630, alt: article.title }] : undefined,
       publishedTime: article.createdAt,
       authors: article.author ? [article.author] : undefined,
     },
     twitter: {
       card: 'summary_large_image',
       title: article.title,
-      description: article.description,
+      description: description,
       images: imageUrl ? [imageUrl] : undefined,
+    },
+    other: {
+      'fb:app_id': process.env.NEXT_PUBLIC_FB_APP_ID || '',
     },
   }
 }

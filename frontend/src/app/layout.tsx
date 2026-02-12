@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_SITE_URL ||
     (process.env.NODE_ENV === 'development'
       ? 'http://localhost:3000'
-      : 'https://your-domain.com')
+      : 'https://www.tintuc24h.site')
   ),
   title: {
     default: 'Tin tức 24h - Đọc báo tin tức mới nhất trong ngày',
