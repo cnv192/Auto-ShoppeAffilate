@@ -201,7 +201,8 @@ const LinkFormArticle: React.FC<LinkFormArticleProps> = ({
                 });
                 
                 if (!res.ok) {
-                    throw new Error('Upload thất bại');
+                    const errorData = await res.json().catch(() => null);
+                    throw new Error(errorData?.message || `Upload thất bại (${res.status})`);
                 }
                 
                 const result = await res.json();

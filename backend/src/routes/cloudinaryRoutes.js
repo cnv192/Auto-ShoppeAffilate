@@ -39,7 +39,7 @@ const storage = new CloudinaryStorage({
         return {
             folder: fullFolder,
             resource_type: resourceType,
-            allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'avi', 'webm', 'ogg'],
+            allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'bmp', 'tiff', 'mp4', 'mov', 'avi', 'webm', 'ogg'],
             transformation: resourceType === 'image' ? [
                 { width: 1200, height: 1200, crop: 'limit' },
                 { quality: 'auto', fetch_format: 'auto' }
@@ -50,14 +50,14 @@ const storage = new CloudinaryStorage({
 
 // File filter
 const fileFilter = (req, file, cb) => {
-    const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    const allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/svg+xml', 'image/bmp', 'image/tiff'];
     const allowedVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'];
     const allowedTypes = [...allowedImageTypes, ...allowedVideoTypes];
     
     if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(new Error('File type không được hỗ trợ. Chỉ chấp nhận: JPG, PNG, GIF, WEBP, MP4, MOV, AVI, WEBM'), false);
+        cb(new Error(`File type "${file.mimetype}" không được hỗ trợ. Chỉ chấp nhận: JPG, PNG, GIF, WEBP, AVIF, SVG, MP4, MOV, AVI, WEBM`), false);
     }
 };
 
@@ -80,7 +80,21 @@ const upload = multer({
  * Requires authentication
  * Returns Cloudinary URL
  */
-router.post('/', upload.single('file'), async (req, res) => {
+router.post('/', (req, res, next) => {
+    upload.single('file')(req, res, (err) => {
+        if (err) {
+            const statusCode = err instanceof multer.MulterError ? 400 : 400;
+            const message = err instanceof multer.MulterError
+                ? (err.code === 'LIMIT_FILE_SIZE' ? 'File quá lớn (tối đa 50MB)' : err.message)
+                : err.message;
+            return res.status(statusCode).json({
+                success: false,
+                message: message
+            });
+        }
+        next();
+    });
+}, async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({
